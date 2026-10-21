@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, ShieldCheck } from "lucide-react";
 
-type Section = { heading: string; paragraphs: string[]; bullets?: string[] };
+type Section = { heading: string; paragraphs?: string[]; bullets?: string[] };
 const docs: Record<string, { title: string; eyebrow: string; intro: string; sections: Section[] }> = {
   terms: { eyebrow: "THE HOUSE RULES", title: "Terms of Service", intro: "These draft terms describe the rules for using My Feet Show, including creator content, messaging, live broadcasts, and tokens. Before launch, the operator's legal name, address, governing law, contact details, and complaint process must be completed and reviewed for each market where the service is offered.", sections: [
     { heading: "1. Who may use the service", paragraphs: ["You must be at least 18 years old and legally able to enter a contract to create an account or use My Feet Show. Do not misrepresent your age. We may request age and identity verification, restrict access while checks are completed, or close an account if we cannot confirm eligibility.", "A parent or guardian may not create or operate an account for a minor. You may not permit a minor to access an account, view restricted content, participate in a call, or appear in content." ] },

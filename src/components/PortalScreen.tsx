@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowDownLeft, ArrowRight, ArrowUpRight, Bell, CalendarDays, Check, ChevronDown, Coins, Compass, CreditCard, Eye, FileImage, Heart, Home, LockKeyhole, LogOut, MessageCircle, MoreHorizontal, Plus, Search, Settings, ShieldAlert, Sparkles, Video, Wallet, X } from "lucide-react";
+import { ArrowDownLeft, ArrowRight, ArrowUpRight, Bell, CalendarDays, Check, ChevronDown, Coins, Compass, CreditCard, Eye, FileImage, Heart, Home, LockKeyhole, LogOut, MessageCircle, MoreHorizontal, Plus, Search, Settings, ShieldAlert, ShieldCheck, Sparkles, Video, Wallet, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
