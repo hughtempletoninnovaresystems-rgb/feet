@@ -7,11 +7,11 @@ type Role = "client" | "model";
 type VerificationStatus = "pending" | "in_progress" | "complete" | "failed" | "error" | "cancelled" | "expired";
 
 const statusCopy: Record<VerificationStatus, string> = {
-  pending: "Yoti has not returned a final result yet. You can check again in a moment.",
-  in_progress: "Yoti is still checking your verification. You can check again in a moment.",
+  pending: "Didit has not returned a final result yet. You can check again in a moment.",
+  in_progress: "Didit is still checking your verification. You can check again in a moment.",
   complete: "Your adult eligibility check is complete. Your account is now verified.",
-  failed: "Yoti could not verify that you are 18 or older. You can start a new check with another available method.",
-  error: "Yoti could not complete this check. You can start a new verification session.",
+  failed: "Didit could not confirm that you are 18 or older. You can start a new check.",
+  error: "Didit could not complete this check. You can start a new verification session.",
   cancelled: "This verification session was cancelled. Start a new check when you are ready.",
   expired: "This verification session expired. Start a new check to continue.",
 };
@@ -94,7 +94,7 @@ export default function AgeVerificationClient({ role, sessionId, cancelled = fal
       const result = await response.json() as { sessionUrl?: string; error?: string };
       if (!response.ok || !result.sessionUrl) throw new Error(result.error ?? "Could not start age verification.");
       const destination = new URL(result.sessionUrl);
-      if (destination.origin !== "https://age.yoti.com") throw new Error("The verification provider returned an invalid link.");
+      if (destination.origin !== "https://verify.didit.me") throw new Error("The verification provider returned an invalid link.");
       window.location.assign(destination.toString());
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not start age verification.");
@@ -106,8 +106,8 @@ export default function AgeVerificationClient({ role, sessionId, cancelled = fal
   return <main className="account-state-page"><section className="account-state-card">
     <span className="eyebrow">ADULT ELIGIBILITY</span>
     <h1>{sessionId ? "Checking your age." : "Verify your age to continue."}</h1>
-    {sessionId ? <p>{status ? statusCopy[status] : "Checking the result securely with Yoti…"}</p> : <p>Use Yoti to confirm that you are 18 or older. My Feet Show receives the check result and does not receive or store your ID document or selfie.</p>}
-    {!sessionId && status !== "pending" && status !== "in_progress" && <button className="button button-dark" type="button" onClick={startVerification} disabled={busy}>{busy ? "Opening Yoti…" : "Continue with Yoti"}</button>}
+    {sessionId ? <p>{status ? statusCopy[status] : "Checking the result securely with Didit…"}</p> : <p>Use Didit to confirm that you are 18 or older. The hosted check may use facial age estimation and an ID check for borderline cases. Our app stores the result state and timestamp, not your selfie or identity document.</p>}
+    {!sessionId && status !== "pending" && status !== "in_progress" && <button className="button button-dark" type="button" onClick={startVerification} disabled={busy}>{busy ? "Opening Didit…" : "Continue with Didit"}</button>}
     {!sessionId && (status === "pending" || status === "in_progress") && <button className="button button-dark" type="button" onClick={() => void checkStatus()} disabled={busy}>{busy ? "Checking…" : "Check result again"}</button>}
     {checkAgain && <button className="button button-dark" type="button" onClick={() => void checkStatus(sessionId)} disabled={busy}>{busy ? "Checking…" : "Check result again"}</button>}
     {sessionId && (status === "failed" || status === "error" || status === "cancelled" || status === "expired") ? <button className="button button-dark" type="button" onClick={startVerification} disabled={busy}>{busy ? "Starting…" : "Start a new check"}</button> : null}

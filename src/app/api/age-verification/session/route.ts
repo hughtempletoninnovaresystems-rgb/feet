@@ -1,7 +1,7 @@
 import { assertSameOrigin, enforceRateLimit, getSessionUser } from "@/lib/auth";
 import { jsonError, rateLimitResponse } from "@/lib/api";
 import { getDb, queryRows } from "@/lib/db";
-import { createYotiAgeSession, getYotiCredentials } from "@/lib/yoti";
+import { createDiditAgeSession, getDiditCredentials } from "@/lib/didit";
 
 export const runtime = "nodejs";
 
@@ -13,34 +13,31 @@ export async function POST(request: Request) {
     if ((user.role !== "client" && user.role !== "model") || !user.email_verified_at || user.status !== "pending" || user.age_verified_at) {
       return jsonError("This account cannot start age verification.", 403);
     }
-    if (!(await enforceRateLimit(request, `yoti-session:${user.id}`, 5, 3600))) return rateLimitResponse();
-    const credentials = getYotiCredentials();
+    if (!(await enforceRateLimit(request, `didit-session:${user.id}`, 5, 3600))) return rateLimitResponse();
+    const credentials = getDiditCredentials();
     if (!credentials) return jsonError("Adult eligibility verification is not configured yet.", 503);
 
     const sql = getDb();
     const rows = queryRows<{ id: string; reference_id: string }>(await sql`
       WITH expired AS (
         UPDATE age_verification_sessions SET status = 'expired', updated_at = now()
-        WHERE user_id = ${user.id} AND status IN ('creating', 'pending', 'in_progress') AND expires_at <= now()
+        WHERE user_id = ${user.id} AND provider = 'didit'
+          AND status IN ('creating', 'pending', 'in_progress') AND expires_at <= now()
         RETURNING id
       )
-      INSERT INTO age_verification_sessions(user_id, reference_id, status, expires_at)
-      VALUES (${user.id}, gen_random_uuid()::text, 'creating', now() + interval '15 minutes')
+      INSERT INTO age_verification_sessions(user_id, provider, reference_id, status, expires_at)
+      VALUES (${user.id}, 'didit', gen_random_uuid()::text, 'creating', now() + interval '30 minutes')
       RETURNING id, reference_id`);
     const session = rows[0];
     if (!session) return jsonError("Could not start age verification.", 503);
 
     try {
-      const providerSession = await createYotiAgeSession(credentials, session.reference_id);
+      const providerSession = await createDiditAgeSession(credentials, session.reference_id);
       await sql`UPDATE age_verification_sessions
                 SET provider_session_id = ${providerSession.id}, status = 'pending',
-                    expires_at = ${providerSession.expires_at}, updated_at = now()
+                    expires_at = now() + interval '30 minutes', updated_at = now()
                 WHERE id = ${session.id} AND user_id = ${user.id} AND status = 'creating'`;
-      const sessionUrl = new URL("https://age.yoti.com/");
-      sessionUrl.searchParams.set("sessionId", providerSession.id);
-      sessionUrl.searchParams.set("sdkId", credentials.sdkId);
-      sessionUrl.searchParams.set("locale", "en-GB");
-      return Response.json({ sessionUrl: sessionUrl.toString() }, { headers: { "Cache-Control": "no-store" } });
+      return Response.json({ sessionUrl: providerSession.url }, { headers: { "Cache-Control": "no-store" } });
     } catch {
       await sql`UPDATE age_verification_sessions SET status = 'error', updated_at = now() WHERE id = ${session.id} AND status = 'creating'`;
       return jsonError("Could not start age verification. Please try again later.", 503);

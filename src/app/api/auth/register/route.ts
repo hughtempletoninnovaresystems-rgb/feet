@@ -27,7 +27,7 @@ export async function POST(request: Request) {
       return jsonError("Account registration is temporarily unavailable. Please try again later.", 503);
     }
     if (process.env.NODE_ENV === "production" && process.env.PUBLIC_SIGNUPS_ENABLED !== "true") {
-      return jsonError("Account registration is not open yet.", 503);
+      return jsonError("Registration will open after the operator completes the required legal, adult eligibility, and service setup.", 503);
     }
 
     const email = normalizedEmail(parsed.data.email);

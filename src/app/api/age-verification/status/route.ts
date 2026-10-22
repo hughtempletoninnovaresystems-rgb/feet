@@ -1,7 +1,7 @@
 import { enforceRateLimit, getSessionUser } from "@/lib/auth";
 import { jsonError, rateLimitResponse } from "@/lib/api";
 import { getDb, queryRows } from "@/lib/db";
-import { getYotiAgeResult, getYotiCredentials, yotiStatusToLocal } from "@/lib/yoti";
+import { diditStatusToLocal, getDiditAgeDecision, getDiditCredentials, hasDiditAgeEvidence } from "@/lib/didit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,16 +15,16 @@ export async function GET(request: Request) {
     if (sessionId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sessionId)) {
       return jsonError("This verification session is invalid.", 400);
     }
-    if (!(await enforceRateLimit(request, `yoti-status:${user.id}`, 30, 900))) return rateLimitResponse();
+    if (!(await enforceRateLimit(request, `didit-status:${user.id}`, 30, 900))) return rateLimitResponse();
     const sql = getDb();
     const sessions = queryRows<{ id: string; reference_id: string; provider_session_id: string; status: string; expires_at: string }>(sessionId ? await sql`
       SELECT id, reference_id, provider_session_id, status, expires_at
       FROM age_verification_sessions
-      WHERE user_id = ${user.id} AND provider_session_id = ${sessionId}
+      WHERE user_id = ${user.id} AND provider = 'didit' AND provider_session_id = ${sessionId}
       LIMIT 1` : await sql`
       SELECT id, reference_id, provider_session_id, status, expires_at
       FROM age_verification_sessions
-      WHERE user_id = ${user.id} AND provider_session_id IS NOT NULL AND status IN ('creating', 'pending', 'in_progress')
+      WHERE user_id = ${user.id} AND provider = 'didit' AND provider_session_id IS NOT NULL AND status IN ('creating', 'pending', 'in_progress')
       ORDER BY created_at DESC LIMIT 1`);
     const session = sessions[0];
     if (!session) return Response.json({ status: "cancelled" }, { headers: { "Cache-Control": "no-store" } });
@@ -35,21 +35,24 @@ export async function GET(request: Request) {
       await sql`UPDATE age_verification_sessions SET status = 'expired', updated_at = now() WHERE id = ${session.id} AND status IN ('creating', 'pending', 'in_progress')`;
       return Response.json({ status: "expired" }, { headers: { "Cache-Control": "no-store" } });
     }
-    const credentials = getYotiCredentials();
+    const credentials = getDiditCredentials();
     if (!credentials) return jsonError("Adult eligibility verification is temporarily unavailable.", 503);
-    const providerResult = await getYotiAgeResult(credentials, session.provider_session_id);
-    if (providerResult.id !== session.provider_session_id || providerResult.sdk_id !== credentials.sdkId ||
-        providerResult.reference_id !== session.reference_id || providerResult.type !== "OVER") {
+    const providerResult = await getDiditAgeDecision(credentials, session.provider_session_id);
+    if (providerResult.session_id !== session.provider_session_id) {
       return jsonError("The verification result could not be confirmed.", 502);
     }
-    const status = yotiStatusToLocal(providerResult.status);
+    const status = diditStatusToLocal(providerResult.status);
     if (!status) return jsonError("The verification result could not be confirmed.", 502);
+    if (status === "complete" && !hasDiditAgeEvidence(providerResult)) {
+      return jsonError("The verification result did not include a confirmed age check.", 502);
+    }
 
     if (status === "complete") {
       await sql`WITH verified_session AS (
                   UPDATE age_verification_sessions
                   SET status = 'complete', completed_at = COALESCE(completed_at, now()), updated_at = now()
-                  WHERE id = ${session.id} AND user_id = ${user.id} AND status <> 'complete'
+                  WHERE id = ${session.id} AND user_id = ${user.id} AND provider = 'didit'
+                    AND status IN ('creating', 'pending', 'in_progress')
                   RETURNING user_id
                 ), verified_user AS (
                   UPDATE users u
@@ -61,11 +64,12 @@ export async function GET(request: Request) {
                   RETURNING u.id
                 ), audit_event AS (
                   INSERT INTO security_audit_events(actor_user_id, subject_user_id, event_type)
-                  SELECT id, id, 'age_verified_yoti' FROM verified_user RETURNING id
+                  SELECT id, id, 'age_verified_didit' FROM verified_user RETURNING id
                 ) SELECT id FROM verified_user`;
     } else {
       await sql`UPDATE age_verification_sessions SET status = ${status}, updated_at = now()
-                WHERE id = ${session.id} AND user_id = ${user.id} AND status <> 'complete'`;
+                WHERE id = ${session.id} AND user_id = ${user.id} AND provider = 'didit'
+                  AND status IN ('creating', 'pending', 'in_progress')`;
     }
     return Response.json({ status }, { headers: { "Cache-Control": "no-store" } });
   } catch {
