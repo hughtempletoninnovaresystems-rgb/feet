@@ -1,0 +1,16 @@
+{
+  "CORSRules": [
+    {
+      "AllowedOrigins": ["https://your-production-domain.example"],
+      "AllowedMethods": ["PUT"],
+      "AllowedHeaders": [
+        "Content-Type",
+        "Content-Length",
+        "Cache-Control",
+        "x-amz-server-side-encryption"
+      ],
+      "ExposeHeaders": ["ETag"],
+      "MaxAgeSeconds": 300
+    }
+  ]
+}

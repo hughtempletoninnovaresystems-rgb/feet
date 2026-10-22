@@ -3,17 +3,20 @@ import { NextResponse, type NextRequest } from "next/server";
 
 export function proxy(request: NextRequest) {
   const nonce = randomBytes(16).toString("base64");
+  const bucket = process.env.S3_BUCKET_NAME?.trim();
+  const region = process.env.AWS_REGION?.trim();
+  const storageOrigin = bucket && region ? `https://s3.${region}.amazonaws.com` : "";
   const directives = [
     "default-src 'self'",
     "base-uri 'self'",
     "object-src 'none'",
     "frame-ancestors 'none'",
     "form-action 'self'",
-    "img-src 'self' data: https://images.unsplash.com",
+    `img-src 'self' data: https://images.unsplash.com${storageOrigin ? ` ${storageOrigin}` : ""}`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' data: https://fonts.gstatic.com",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
-    `connect-src 'self'${process.env.NODE_ENV === "development" ? " ws://localhost:*" : ""}`,
+    `connect-src 'self'${storageOrigin ? ` ${storageOrigin}` : ""} https://sdkgw.us1.twilio.com wss://*.vss.twilio.com wss://sdkgw.us1.twilio.com${process.env.NODE_ENV === "development" ? " ws://localhost:*" : ""}`,
     ...(process.env.NODE_ENV === "production" ? ["upgrade-insecure-requests"] : []),
   ];
   const contentSecurityPolicy = directives.join("; ");

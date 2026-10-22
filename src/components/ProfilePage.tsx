@@ -1,32 +1,112 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, Flag, Heart, MessageCircle, MoreHorizontal, ShieldAlert, Video } from "lucide-react";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, ArrowRight, Flag, Heart, MessageCircle, ShieldAlert } from "lucide-react";
+import { useEffect, useState } from "react";
 
-const profiles: Record<string, { name: string; handle: string; role: "creator" | "client"; location: string; about: string; image: string; likes: number; rate?: number; tag?: string }> = {
-  "amelia-rose": { name: "Amelia Rose", handle: "@amelia.rose", role: "creator", location: "Brighton, United Kingdom", about: "Pedicure stories, slow mornings, and little everyday details. I love finding the warm light in an ordinary day. Come say hello — I'm usually somewhere with a coffee and my camera.", image: "photo-1534528741775-53994a69daeb", likes: 2400, rate: 18, tag: "Pedicure stories" },
-  "sofia-lane": { name: "Sofia Lane", handle: "@sofialane", role: "creator", location: "Lisbon, Portugal", about: "A little sun, a little colour, and a lot of soft pink. Sharing my favourite details from the week, one set at a time.", image: "photo-1524504388940-b1c1722653e1", likes: 1800, rate: 14, tag: "Soft & sunny" },
-  "mia-sol": { name: "Mia Sol", handle: "@miasol", role: "creator", location: "Los Angeles, United States", about: "Barefoot days and golden hour. Come find the joy in the small things with me.", image: "photo-1531123897727-8f129e1688ce", likes: 3100, rate: 22, tag: "Barefoot days" },
-  "ruby-ellis": { name: "Ruby Ellis", handle: "@ruby.ellis", role: "creator", location: "Manchester, United Kingdom", about: "Nail art, tiny details, and the occasional rainy day in Manchester.", image: "photo-1508214751196-bcfd4ca60f91", likes: 970, rate: 16, tag: "Nail art & more" },
-  "nina-june": { name: "Nina June", handle: "@ninajune", role: "creator", location: "Melbourne, Australia", about: "Everyday detail collector. I make little photo stories about colour, texture, and the things we walk past.", image: "photo-1529139574466-a303027c1d8b", likes: 4200, rate: 20, tag: "Everyday detail" },
-  "eva-luna": { name: "Eva Luna", handle: "@evaluna", role: "creator", location: "Barcelona, Spain", about: "Summer feeling, all year round. Sharing sunlit moments, pretty polish, and good energy.", image: "photo-1524250502761-1ac6f2e30d43", likes: 1200, rate: 12, tag: "Summer feeling" },
-  "jamierivers": { name: "Jamie Rivers", handle: "@jamierivers", role: "client", location: "London, United Kingdom", about: "Here for thoughtful conversations, beautiful details, and supporting independent creators.", image: "photo-1500648767791-00dcc994a43e", likes: 148 },
-  "alexmorgan": { name: "Alex Morgan", handle: "@alexmorgan", role: "client", location: "London, United Kingdom", about: "A curious sort who loves discovering new people and creative work.", image: "photo-1506794778202-cad84cf45f1d", likes: 62 },
-  "casey-lee": { name: "Casey Lee", handle: "@casey.lee", role: "client", location: "Dublin, Ireland", about: "I appreciate great storytelling, kind communities, and lovely art direction.", image: "photo-1535713875002-d1d0cf377fde", likes: 319 },
-  "taylor-grey": { name: "Taylor Grey", handle: "@taylor.grey", role: "client", location: "Bristol, United Kingdom", about: "Looking for little details that make an ordinary day feel special.", image: "photo-1507003211169-0a1dd7228f2d", likes: 91 },
+type Profile = {
+  id: string;
+  display_name: string;
+  handle: string;
+  bio: string;
+  location_label: string | null;
+  categories: string[];
+  call_rate_tokens_per_minute: number;
+  allow_likes: boolean;
+  allow_comments: boolean;
+  likes: number;
+  liked: boolean;
+  blocked: boolean;
 };
+type Comment = { id: string; display_name: string; body: string; created_at: string };
+type CreatorMedia = { id: string; title: string; description: string; media_type: string; price_tokens: number; published_at: string };
 
 export default function ProfilePage({ slug }: { slug: string }) {
-  const profile = profiles[slug] ?? profiles["amelia-rose"];
-  const [liked, setLiked] = useState(false);
-  const [following, setFollowing] = useState(false);
-  const [blocked, setBlocked] = useState(false);
+  const router = useRouter();
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [media, setMedia] = useState<CreatorMedia[]>([]);
   const [comment, setComment] = useState("");
-  const [comments, setComments] = useState(["Such a lovely little corner of the internet ✨", "Your latest set is beautiful!"]);
   const [notice, setNotice] = useState("");
-  const say = (text: string) => { setNotice(text); window.setTimeout(() => setNotice(""), 3200); };
-  const postComment = () => { if (comment.trim()) { setComments([...comments, comment.trim()]); setComment(""); } };
+  const [loading, setLoading] = useState(true);
+  const [canMessage, setCanMessage] = useState(false);
 
-  return <main className="profile-page"><div className="site-preview-banner" role="note">Sample profile preview. Content, comments, and interactions are local examples and are not saved.</div><header className="profile-header"><Link href="/client" className="profile-back"><ArrowLeft size={16}/> Back to discover</Link><Link href="/" className="brand"><span className="brand-mark">m</span><span>my feet <b>show</b></span></Link><Link href="/login" className="profile-login">Log in</Link></header><div className="profile-wrap"><div className="profile-cover"><img src="https://images.unsplash.com/photo-1662132090920-060bba5cdf18?auto=format&fit=crop&w=1500&q=85" alt="Soft editorial detail of pedicured feet in sandals"/><span className="profile-cover-tag">A LITTLE MORE PERSONAL</span></div><div className="profile-main"><div className="profile-identity"><img className="profile-avatar" src={`https://images.unsplash.com/${profile.image}?auto=format&fit=crop&w=360&q=80`} alt={`${profile.name} profile`}/><div className="profile-identity-copy"><span className="eyebrow">{profile.role === "creator" ? "INDEPENDENT CREATOR" : "COMMUNITY MEMBER"}</span><h1>{profile.name} <span className="verified-dot">✓</span></h1><p>{profile.handle} <span>·</span> {profile.location}</p></div><div className="profile-actions">{profile.role === "creator" && <button className="button button-dark" onClick={() => say("Private calls will be enabled when Twilio Video is connected.")}><Video size={15}/> Call · {profile.rate} tokens/min</button>}<button className={following ? "button button-light following" : "button button-light"} onClick={() => setFollowing(!following)}>{following ? "Following" : "Follow"} {following && <span>✓</span>}</button><button className="icon-button" aria-label="Report profile" onClick={() => say("Report submitted for review once moderation is connected.")}><Flag size={16}/></button><button className="icon-button" aria-label="Block profile" onClick={() => { setBlocked(!blocked); say(blocked ? "This profile is unblocked." : "This profile is blocked. They can no longer interact with you."); }}><ShieldAlert size={17}/></button></div></div><div className="profile-stats"><span><Heart size={15} fill="currentColor"/> {profile.likes.toLocaleString()} likes</span><span><MessageCircle size={15}/> {comments.length} comments</span>{profile.tag && <span className="tag-pill">{profile.tag}</span>}</div><div className="profile-columns"><section className="profile-about"><div className="list-heading"><div><span className="eyebrow">A LITTLE ABOUT ME</span><h2>Hello, I&apos;m {profile.name.split(" ")[0]}.</h2></div><button className={liked ? "like-profile liked" : "like-profile"} onClick={() => setLiked(!liked)}><Heart size={16} fill={liked ? "currentColor" : "none"}/> {liked ? "Liked" : "Like profile"}</button></div><p className="profile-bio">{profile.about}</p><div className="profile-content-title"><span className="eyebrow">THE LATEST DETAILS</span><span>{profile.role === "creator" ? "Private content · from 12 tokens" : "Shared with the community"}</span></div><div className="profile-content-grid">{["photo-1662132090920-060bba5cdf18", "photo-1662132090867-57a37fa1edf8", "photo-1515886657613-9f3515b0c78f"].map((img, index) => <button className="profile-content-card" key={img} onClick={() => say(profile.role === "creator" ? "This item is available in the creator's media collection." : "This post is shared with the community.")}><img src={`https://images.unsplash.com/${img}?auto=format&fit=crop&w=450&q=70`} alt="Creator content preview"/><span>{profile.role === "creator" ? <><span className="content-lock">✦</span> {index === 1 ? "24" : "12"} tokens</> : "Community post"}</span></button>)}</div><div className="comments-panel"><div className="comments-head"><div><span className="eyebrow">KIND WORDS</span><h2>Comments <span>({comments.length})</span></h2></div><button className="icon-button" aria-label="More comment options"><MoreHorizontal size={19}/></button></div><div className="comment-compose"><div className="comment-avatar">A</div><input value={comment} onChange={(e) => setComment(e.target.value)} onKeyDown={(e) => e.key === "Enter" && postComment()} placeholder={`Leave ${profile.name.split(" ")[0]} a kind comment...`}/><button onClick={postComment} disabled={!comment.trim()} aria-label="Post comment"><ArrowRight size={16}/></button></div><div className="comment-list">{comments.map((text, index) => <div className="comment-item" key={`${text}-${index}`}><div className="comment-avatar">{index % 2 ? "J" : "A"}</div><div><b>{index % 2 ? "Jamie Rivers" : "Alex Morgan"}</b><p>{text}</p><small>Just now · <button onClick={() => say("Thanks for keeping comments kind.")}>Reply</button></small></div><button className="comment-like" aria-label="Like comment" onClick={() => say("Comment liked.")}><Heart size={14}/></button></div>)}</div></div></section><aside className="profile-aside"><div className="profile-connect-card"><span className="connect-icon"><MessageCircle size={18}/></span><h3>Say hello to {profile.name.split(" ")[0]}</h3><p>Good conversations make this community feel special.</p><button className="button button-dark button-full" onClick={() => say("Sign in or create an account to message.")}>Send a message <ArrowRight size={15}/></button><span className="connect-note"><ShieldAlert size={12}/> Respectful messages only</span></div><div className="profile-community-note"><Heart size={16}/><span>Be kind, respect boundaries, and help keep the community welcoming.</span></div></aside></div>{blocked && <div className="blocked-banner profile-block-banner"><ShieldAlert size={15}/> This profile is blocked. <button onClick={() => setBlocked(false)}>Unblock</button></div>}</div></div>{notice && <div className="toast"><span className="toast-check">✓</span>{notice}<button onClick={() => setNotice("")}>×</button></div>}<footer className="profile-footer"><span>© 2026 My Feet Show</span><span><Link href="/legal/terms">Terms</Link><Link href="/legal/privacy">Privacy</Link><Link href="/legal/safety">Safety</Link><Link href="/legal/tokens">Tokens</Link><Link href="/legal/cookies">Cookies</Link></span></footer></main>;
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/profiles/${encodeURIComponent(slug)}`, { cache: "no-store" }).then(async (response) => {
+      if (!response.ok) throw new Error("This profile is unavailable.");
+      return await response.json() as { profile: Profile; comments: Comment[]; media: CreatorMedia[]; canMessage: boolean };
+    }).then((result) => { if (active) { setProfile(result.profile); setComments(result.comments); setMedia(result.media ?? []); setCanMessage(result.canMessage); } })
+      .catch(() => { if (active) setNotice("This profile is unavailable."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [slug]);
+
+  const interact = async (payload: Record<string, string>) => {
+    const response = await fetch(`/api/profiles/${encodeURIComponent(slug)}/interactions`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+    });
+    const result = await response.json().catch(() => ({})) as { error?: string; liked?: boolean; blocked?: boolean; status?: string };
+    if (!response.ok) throw new Error(result.error ?? "That action could not be completed.");
+    if (payload.action === "like" || payload.action === "unlike") {
+      setProfile((current) => current ? { ...current, liked: result.liked === true, likes: current.likes + (result.liked ? 1 : -1) } : current);
+    }
+    if (payload.action === "block" || payload.action === "unblock") {
+      setProfile((current) => current ? { ...current, blocked: result.blocked === true } : current);
+    }
+    if (payload.action === "comment") {
+      setComment("");
+      setNotice("Your comment was submitted for moderator review.");
+    } else if (payload.action === "report") setNotice("Your report was sent to the moderation team.");
+    else if (payload.action === "block") setNotice("This creator is blocked.");
+    else if (payload.action === "unblock") setNotice("This creator is unblocked.");
+    else setNotice(payload.action === "like" ? "Profile liked." : "Profile unliked.");
+  };
+
+  const runInteraction = (payload: Record<string, string>) => {
+    void interact(payload).catch((error: unknown) => setNotice(error instanceof Error ? error.message : "That action could not be completed."));
+  };
+
+  const postComment = () => {
+    if (!comment.trim()) return;
+    runInteraction({ action: "comment", body: comment.trim() });
+  };
+
+  const startMessage = async () => {
+    if (!profile || !canMessage) return;
+    try {
+      const response = await fetch("/api/conversations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetUserId: profile.id }) });
+      const result = await response.json() as { conversationId?: string; error?: string };
+      if (!response.ok || !result.conversationId) throw new Error(result.error ?? "Messaging is unavailable.");
+      router.push(`/client/messages?conversation=${encodeURIComponent(result.conversationId)}`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Messaging is unavailable.");
+    }
+  };
+
+  if (!profile) return <main className="profile-page"><header className="profile-header"><Link href="/client" className="profile-back"><ArrowLeft size={16}/> Back to discover</Link><Link href="/" className="brand"><span className="brand-mark">m</span><span>my feet <b>show</b></span></Link></header><div className="profile-wrap"><div className="empty-state">{loading ? "Loading creator profile…" : notice || "This profile is unavailable."}</div></div></main>;
+
+  const firstName = profile.display_name.split(" ")[0] ?? profile.display_name;
+  return <main className="profile-page">
+    <header className="profile-header"><Link href="/client" className="profile-back"><ArrowLeft size={16}/> Back to discover</Link><Link href="/" className="brand"><span className="brand-mark">m</span><span>my feet <b>show</b></span></Link><Link href="/client/settings" className="profile-login">Account</Link></header>
+    <div className="profile-wrap">
+      <div className="profile-cover"><span className="profile-cover-tag">CREATOR PROFILE</span></div>
+      <div className="profile-main">
+        <div className="profile-identity"><div className="profile-avatar profile-avatar-placeholder">{firstName.slice(0, 1).toUpperCase()}</div><div className="profile-identity-copy"><span className="eyebrow">INDEPENDENT CREATOR</span><h1>{profile.display_name}</h1><p>{profile.handle}{profile.location_label ? <><span> · </span>{profile.location_label}</> : null}</p></div><div className="profile-actions"><button className={profile.liked ? "button button-light following" : "button button-light"} disabled={!profile.allow_likes} onClick={() => runInteraction({ action: profile.liked ? "unlike" : "like" })}><Heart size={15} fill={profile.liked ? "currentColor" : "none"}/>{profile.liked ? "Liked" : "Like"}</button><button className="icon-button" aria-label="Report profile" onClick={() => { const reason = window.prompt("Why are you reporting this profile?"); if (reason?.trim()) runInteraction({ action: "report", reason: reason.trim() }); }}><Flag size={16}/></button><button className="icon-button" aria-label={profile.blocked ? "Unblock profile" : "Block profile"} onClick={() => runInteraction({ action: profile.blocked ? "unblock" : "block" })}><ShieldAlert size={17}/></button></div></div>
+        <div className="profile-stats"><span><Heart size={15} fill="currentColor"/> {profile.likes.toLocaleString()} likes</span><span><MessageCircle size={15}/> {comments.length} comments</span>{profile.categories[0] && <span className="tag-pill">{profile.categories[0]}</span>}</div>
+        <div className="profile-columns"><section className="profile-about"><div className="list-heading"><div><span className="eyebrow">A LITTLE ABOUT ME</span><h2>Hello, I&apos;m {firstName}.</h2></div></div><p className="profile-bio">{profile.bio || "This creator has not added a bio yet."}</p>
+          <div className="profile-content-title"><span className="eyebrow">THE LATEST DETAILS</span><span>Purchases are currently disabled.</span></div>
+          <div className="profile-content-grid">{media.map((item) => <article className="profile-content-card" key={item.id}><div className="profile-content-placeholder">{item.media_type === "video" ? "VIDEO" : "PHOTO SET"}</div><span><span className="content-lock">✦</span> {item.price_tokens.toLocaleString()} tokens · unavailable</span></article>)}{media.length === 0 && <p className="empty-state">No approved content is published yet.</p>}</div>
+          <div className="comments-panel"><div className="comments-head"><div><span className="eyebrow">COMMUNITY</span><h2>Comments <span>({comments.length})</span></h2></div></div>
+            {profile.allow_comments && <div className="comment-compose"><div className="comment-avatar">Y</div><input value={comment} onChange={(event) => setComment(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") postComment(); }} placeholder={`Leave ${firstName} a kind comment…`}/><button onClick={postComment} disabled={!comment.trim()} aria-label="Submit comment"><ArrowRight size={16}/></button></div>}
+            <div className="comment-list">{comments.map((item) => <div className="comment-item" key={item.id}><div className="comment-avatar">{item.display_name.slice(0, 1).toUpperCase()}</div><div><b>{item.display_name}</b><p>{item.body}</p><small>{new Date(item.created_at).toLocaleDateString()}</small></div></div>)}{comments.length === 0 && <p className="empty-state">No approved comments yet.</p>}</div>
+          </div>
+        </section><aside className="profile-aside"><div className="profile-connect-card"><span className="connect-icon"><MessageCircle size={18}/></span><h3>Say hello to {firstName}</h3><p>Start a private conversation through the platform.</p><button className="button button-dark button-full" onClick={() => void startMessage()} disabled={!canMessage}>Send a message <ArrowRight size={15}/></button></div><div className="profile-community-note"><Heart size={16}/><span>Comments wait for moderator review before they appear.</span></div></aside></div>
+        {profile.blocked && <div className="blocked-banner profile-block-banner"><ShieldAlert size={15}/> This creator is blocked. <button onClick={() => runInteraction({ action: "unblock" })}>Unblock</button></div>}
+      </div>
+    </div>
+    {notice && <div className="toast"><span className="toast-check">✓</span>{notice}<button onClick={() => setNotice("")}>×</button></div>}
+    <footer className="profile-footer"><span>© 2026 My Feet Show</span><span><Link href="/legal/terms">Terms</Link><Link href="/legal/privacy">Privacy</Link><Link href="/legal/safety">Safety</Link><Link href="/legal/tokens">Tokens</Link><Link href="/legal/cookies">Cookies</Link></span></footer>
+  </main>;
 }

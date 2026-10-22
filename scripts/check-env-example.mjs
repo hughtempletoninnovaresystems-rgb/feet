@@ -21,6 +21,7 @@ const blankVariables = [
   "DIDIT_API_KEY",
   "DIDIT_WORKFLOW_ID",
   "DIDIT_WEBHOOK_SECRET",
+  "PAYMENT_PROVIDER",
   "AWS_ACCESS_KEY_ID",
   "AWS_SECRET_ACCESS_KEY",
   "S3_BUCKET_NAME",
@@ -35,8 +36,10 @@ for (const key of blankVariables) {
   if (entries.get(key) !== "") throw new Error(`Credentials and service values must stay blank in .env.example: ${key}`);
 }
 
-for (const key of ["PUBLIC_SIGNUPS_ENABLED", "MARKETPLACE_LAUNCH_READY"]) {
+for (const key of ["PUBLIC_SIGNUPS_ENABLED", "MARKETPLACE_LAUNCH_READY", "LEGAL_SIGNOFF_COMPLETE", "UK_AGE_ASSURANCE_SIGNED_OFF", "MODERATION_OPERATIONS_READY", "CONTENT_SCANNING_READY", "PAYMENT_PROVIDER_APPROVED", "PAYMENT_INTEGRATION_READY"]) {
   if (entries.get(key) !== "false") throw new Error(`Production launch switch must default to false in .env.example: ${key}`);
 }
+
+if (entries.get("TWILIO_VIDEO_API_KEY_REGION") !== "us1") throw new Error("Twilio Video API key region must be set to us1.");
 
 console.log("Environment example is safe and launch-gated.");

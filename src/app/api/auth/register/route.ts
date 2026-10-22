@@ -43,6 +43,18 @@ export async function POST(request: Request) {
         INSERT INTO users(email, password_hash, role, display_name)
         VALUES (${email}, ${passwordHash}, ${parsed.data.role}, ${parsed.data.displayName})
         RETURNING id, email
+      ), new_client_profile AS (
+        INSERT INTO client_profiles(user_id, handle)
+        SELECT id, '@' || COALESCE(NULLIF(trim(both '-' from regexp_replace(lower(${parsed.data.displayName}), '[^a-z0-9]+', '-', 'g')), ''), 'member')
+          || '-' || left(replace(id::text, '-', ''), 8)
+        FROM new_user WHERE ${parsed.data.role} = 'client'
+        RETURNING user_id
+      ), new_model_profile AS (
+        INSERT INTO model_profiles(user_id, handle)
+        SELECT id, '@' || COALESCE(NULLIF(trim(both '-' from regexp_replace(lower(${parsed.data.displayName}), '[^a-z0-9]+', '-', 'g')), ''), 'creator')
+          || '-' || left(replace(id::text, '-', ''), 8)
+        FROM new_user WHERE ${parsed.data.role} = 'model'
+        RETURNING user_id
       ), new_identity AS (
         INSERT INTO auth_identities(user_id, provider, provider_subject)
         SELECT id, 'email', email FROM new_user RETURNING user_id
