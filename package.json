@@ -14,7 +14,7 @@
     "@aws-sdk/s3-request-presigner": "^3.900.0",
     "@neondatabase/serverless": "^1.0.2",
     "@twilio/conversations": "^3.0.1",
-    "lucide-react": "^0.468.0",
+    "lucide-react": "^1.59.0",
     "next": "^16.0.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
