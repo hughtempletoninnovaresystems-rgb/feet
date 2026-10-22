@@ -43,7 +43,7 @@ CREATE TABLE model_profiles (
   call_rate_tokens_per_minute integer NOT NULL DEFAULT 18 CHECK (call_rate_tokens_per_minute > 0),
   default_photo_price_tokens integer NOT NULL DEFAULT 12 CHECK (default_photo_price_tokens > 0),
   default_video_price_tokens integer NOT NULL DEFAULT 24 CHECK (default_video_price_tokens > 0),
-  stripe_connect_account_id text UNIQUE,
+  payout_provider_account_id text UNIQUE,
   payout_onboarding_complete boolean NOT NULL DEFAULT false,
   discoverable boolean NOT NULL DEFAULT true,
   show_online_status boolean NOT NULL DEFAULT true,
@@ -263,12 +263,14 @@ CREATE TABLE reports (
   reviewed_at timestamptz
 );
 
-CREATE TABLE stripe_events (
-  id text PRIMARY KEY,
+CREATE TABLE payment_provider_events (
+  provider text NOT NULL,
+  event_id text NOT NULL,
   event_type text NOT NULL,
   received_at timestamptz NOT NULL DEFAULT now(),
   processed_at timestamptz,
-  processing_error text
+  processing_error text,
+  PRIMARY KEY (provider, event_id)
 );
 
 -- A ledger move and both cached balances commit atomically. Call from a trusted server transaction.
@@ -296,7 +298,20 @@ BEGIN
 
   -- An already-processed idempotency key should not debit twice.
   SELECT id INTO v_entry_id FROM token_ledger WHERE idempotency_key = p_idempotency_key;
-  IF v_entry_id IS NOT NULL THEN RETURN v_entry_id; END IF;
+  IF v_entry_id IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM token_ledger
+      WHERE id = v_entry_id
+        AND from_wallet_id = p_from_wallet
+        AND to_wallet_id = p_to_wallet
+        AND amount_tokens = p_amount
+        AND entry_type = p_entry_type
+        AND external_reference IS NOT DISTINCT FROM p_external_reference
+    ) THEN
+      RAISE EXCEPTION 'Idempotency key was already used for a different transfer';
+    END IF;
+    RETURN v_entry_id;
+  END IF;
   IF v_from_balance < p_amount THEN RAISE EXCEPTION 'Insufficient token balance'; END IF;
 
   UPDATE wallets SET balance_tokens = balance_tokens - p_amount WHERE id = p_from_wallet;
@@ -307,3 +322,7 @@ BEGIN
   RETURN v_entry_id;
 END;
 $$;
+
+-- Do not expose wallet transfers to arbitrary database roles. Grant this
+-- function only to the restricted server-side application role after setup.
+REVOKE ALL ON FUNCTION public.move_tokens(uuid, uuid, bigint, text, text, text, jsonb) FROM PUBLIC;

@@ -10,6 +10,7 @@ button{color:inherit;cursor:pointer}
 img{display:block;max-width:100%}
 .wrap{width:min(1170px,calc(100% - 56px));margin-inline:auto}
 .brand{display:inline-flex;align-items:center;gap:10px;font-size:17px;letter-spacing:-.6px;font-weight:500;white-space:nowrap}
+.site-preview-banner{padding:10px 18px;background:#fbf3e8;color:#6f5540;text-align:center;font-size:11px;line-height:1.5}
 .brand b{font-weight:700}
 .brand-mark{width:30px;height:30px;display:inline-grid;place-items:center;border-radius:50% 50% 48% 18%;background:var(--rose);color:#fff;font-family:'Playfair Display',serif;font-size:23px;font-style:italic;line-height:1;transform:rotate(-9deg)}
 .button{min-height:46px;padding:0 20px;display:inline-flex;align-items:center;justify-content:center;gap:9px;border:1px solid transparent;border-radius:8px;font-size:13px;font-weight:700;transition:transform .18s ease,background .18s ease,border-color .18s ease;white-space:nowrap}
@@ -122,6 +123,18 @@ img{display:block;max-width:100%}
 
 /* Auth */
 .auth-page{min-height:100vh;display:grid;grid-template-columns:minmax(360px,.88fr) 1.12fr;background:#fff}
+.portal-preview-notice{margin:0 0 20px;padding:11px 14px;border:1px solid #eadbc9;border-radius:8px;background:#fbf3e8;color:#6f5540;font-size:12px}
+.account-state-page{min-height:100vh;display:grid;place-items:center;padding:28px;background:var(--paper)}
+.account-state-card{width:min(520px,100%);padding:clamp(26px,5vw,52px);border:1px solid var(--line);border-radius:16px;background:#fff;box-shadow:var(--shadow)}
+.account-state-card h1{margin:12px 0;font-family:'Playfair Display',serif;font-size:clamp(30px,6vw,46px);font-weight:500;line-height:1.08}
+.account-state-card>p{color:var(--muted);line-height:1.8}
+.account-state-card>.button{margin-top:10px}
+.account-state-card>details{margin:24px 0 16px;border-top:1px solid var(--line);padding-top:16px;color:var(--ink-soft)}
+.account-state-card summary{cursor:pointer;font-size:13px;font-weight:700}
+.account-resend-form{display:grid;gap:12px;margin-top:15px}
+.account-resend-form label{display:grid;gap:7px;font-size:12px;font-weight:700}
+.account-resend-form input{min-height:43px;padding:0 12px;border:1px solid var(--line);border-radius:7px;background:#fff}
+.account-state-notice{padding:12px;border-radius:8px;background:#f4efec;color:var(--plum-dark);font-size:13px}
 .auth-side{min-height:100vh;position:relative;overflow:hidden;padding:32px clamp(28px,5vw,70px);background:#f0e7e4}
 .auth-side .brand{position:relative;z-index:1}
 .auth-side-copy{position:relative;z-index:1;margin-top:87px;max-width:430px}
@@ -174,7 +187,8 @@ img{display:block;max-width:100%}
 .nav-unread{width:17px;height:17px;margin-left:auto;display:grid;place-items:center;border-radius:50%;background:#e9d7e2;color:var(--plum);font-size:8px;font-style:normal;font-weight:700}
 .side-help{position:relative;margin:12px 3px 15px;padding:14px 12px 13px;border:1px solid #eee8e1;border-radius:9px;background:#fcfaf7}
 .help-spark{width:28px;height:28px;display:grid;place-items:center;margin-bottom:8px;border-radius:8px;background:#f0e8ef;color:var(--plum)}.side-help>b{font-size:10px}.side-help p{margin:4px 0 10px;color:#89827a;font-size:9px;line-height:1.55}.side-help button{display:flex;align-items:center;gap:6px;padding:0;border:0;background:none;color:var(--plum);font-size:9px;font-weight:700}
-.side-signout{display:flex;align-items:center;gap:10px;padding:12px 11px;border-top:1px solid #f0ece7;color:#817b75;font-size:10px;font-weight:600}
+.side-signout{display:flex;align-items:center;gap:10px;width:100%;padding:12px 11px;border:0;border-top:1px solid #f0ece7;background:transparent;color:#817b75;text-align:left;font:inherit;font-size:10px;font-weight:600}
+.button:disabled{opacity:.55;cursor:not-allowed;transform:none}
 .portal-main{min-height:100vh;margin-left:246px}
 .portal-topbar{height:64px;position:sticky;top:0;z-index:4;display:flex;align-items:center;justify-content:space-between;padding:0 clamp(25px,4vw,50px);border-bottom:1px solid #ebe7e2;background:rgba(255,255,255,.92);backdrop-filter:blur(14px)}
 .breadcrumb{display:flex;align-items:center;gap:10px;color:#9a948c;font-size:10px}.breadcrumb a:hover{color:var(--plum)}.breadcrumb b{color:#4e4a45;font-weight:600}

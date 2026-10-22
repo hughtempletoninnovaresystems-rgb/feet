@@ -27,20 +27,21 @@ export default function LandingPage() {
       <div className="nav-actions"><Link href="/login" className="nav-login">Log in</Link><Link href="/register?role=client" className="button button-dark button-small">Join the show <ArrowRight size={15} /></Link></div>
       <button className="menu-button" aria-label={menuOpen ? "Close menu" : "Open menu"} onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X /> : <Menu />}</button>
     </header>
+    <div className="site-preview-banner" role="note">Product preview. Creator profiles, availability, prices, and activity shown here are sample content; accounts and marketplace services are not live.</div>
 
     <section className="hero wrap">
-      <div className="hero-copy">
+        <div className="hero-copy">
         <div className="eyebrow"><span className="eyebrow-dot" /> YOUR SPACE. YOUR SHOW.</div>
         <h1>A little more<br /><em>personal.</em></h1>
         <p className="hero-lede">Meet independent creators, discover their work, and connect in a space made for the details.</p>
-        <div className="hero-buttons"><Link href="/client" className="button button-dark">Explore creators <ArrowRight size={17} /></Link><Link href="/register?role=model" className="button button-light">I'm a creator</Link></div>
+        <div className="hero-buttons"><Link href="/client" className="button button-dark">Explore creators <ArrowRight size={17} /></Link><Link href="/register?role=model" className="button button-light">I&apos;m a creator</Link></div>
         <div className="trust-row"><div className="avatar-stack"><span>J</span><span>M</span><span>A</span><span>+</span></div><div><b>A community with care</b><small>Adults only · Creator led · Always in control</small></div></div>
       </div>
       <div className="hero-art" aria-label="Editorial portrait of a pedicure in sandals">
         <div className="hero-orbit orbit-one" /><div className="hero-orbit orbit-two" />
         <div className="hero-photo-frame"><img src="https://images.unsplash.com/photo-1662132090920-060bba5cdf18?auto=format&fit=crop&w=1050&q=85" alt="A warm, editorial detail of a pedicure in suede sandals" /></div>
         <div className="floating-note note-top"><span className="note-icon"><Sparkles size={15} /></span><span><b>Made for you</b><small>Discover your kind of detail</small></span></div>
-        <div className="floating-note note-bottom"><span className="live-pip" /><span><b>Live now</b><small>Come say hello</small></span><ArrowUpRight size={16} /></div>
+        <div className="floating-note note-bottom"><span className="live-pip" /><span><b>Sample preview</b><small>Marketplace not live</small></span><ArrowUpRight size={16} /></div>
         <div className="hero-stamp">M<br /><small>F</small><br />S</div>
         <div className="hero-caption">A closer look at the things we love.</div>
       </div>
@@ -51,7 +52,7 @@ export default function LandingPage() {
       <div className="wrap">
         <div className="section-heading"><div><div className="eyebrow">THE PEOPLE BEHIND THE DETAILS</div><h2>Find your <em>kind</em> of creator.</h2></div><Link href="/client" className="text-link">See all creators <ArrowRight size={16} /></Link></div>
         <div className="creator-grid" id="creators">{creators.map((creator, i) => <article className={`creator-card ${creator.tint}`} key={creator.name}>
-          <div className="creator-photo"><img src={`https://images.unsplash.com/${creator.image}?auto=format&fit=crop&w=720&q=80`} alt={`${creator.name}, independent creator`} /><span className="creator-available"><span className="available-dot" /> {i === 1 ? "LIVE SOON" : "AVAILABLE"}</span><button className={liked.includes(creator.name) ? "heart-button liked" : "heart-button"} aria-label={`Like ${creator.name}`} onClick={() => toggleLike(creator.name)}><Heart size={17} fill={liked.includes(creator.name) ? "currentColor" : "none"} /></button></div>
+          <div className="creator-photo"><img src={`https://images.unsplash.com/${creator.image}?auto=format&fit=crop&w=720&q=80`} alt={`${creator.name}, sample creator profile`} /><span className="creator-available">SAMPLE</span><button className={liked.includes(creator.name) ? "heart-button liked" : "heart-button"} aria-label={`Preview like for ${creator.name}`} onClick={() => toggleLike(creator.name)}><Heart size={17} fill={liked.includes(creator.name) ? "currentColor" : "none"} /></button></div>
           <div className="creator-info"><div><h3>{creator.name}</h3><p>{creator.location} <span>·</span> {i === 0 ? "Pedicure stories" : i === 1 ? "Soft & sunny" : "Barefoot days"}</p></div><div className="creator-rate"><b>{creator.rate}</b><small>tokens/min</small></div></div>
           <Link href="/client" className="creator-link">View profile <ArrowUpRight size={15} /></Link>
         </article>)}</div>

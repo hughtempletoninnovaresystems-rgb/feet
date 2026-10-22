@@ -1,61 +1,95 @@
 # My Feet Show
 
-A polished Next.js starter for an adults-only creator marketplace with separate client and model portals. The current UI is a front-end prototype with seeded demo data and local interaction states. It does not accept payments, send emails, store uploads, or connect video calls yet.
+My Feet Show is a pre-production, UK-focused adults-only creator marketplace prototype. It now has server-side email/password authentication and a Yoti age-verification session flow. It is not production-ready: profile data and portal interactions are previews; payments, uploads, messaging, calls, and moderation are not connected. The current Stripe selection is blocked by Stripe's published adult-content policy, so the service cannot accept payments through Stripe unless Stripe grants explicit written approval or the operator selects another eligible provider.
+
+## Current release gates
+
+- `PUBLIC_SIGNUPS_ENABLED` must remain `false` in production until legal, privacy, safeguarding, and UK age-assurance reviews are complete and the Yoti production account is configured and verified.
+- `MARKETPLACE_LAUNCH_READY` must remain `false` in production. Client and creator portal routes return to a launch-gate page unless it is explicitly enabled after all launch gates are met.
+- Yoti age checks are created and retrieved server-side. The app activates an account only after the Yoti result endpoint returns a matching `OVER` session with `COMPLETE`; it stores the result state and timestamp, not ID or selfie data. Production Yoti credentials and a real end-to-end provider review are still required. See [Yoti's session and result documentation](https://developers.yoti.com/age-verification/create-a-session) and [result API](https://developers.yoti.com/age-verification/results).
+- Checkout and payouts are disabled. Stripe's current [published policy](https://stripe.com/legal/restricted-businesses) prohibits adult content and services and restricts content-creation platforms; do not configure or use Stripe for this product without written, product-specific approval. Select an eligible provider before enabling any real funds flow.
+- The intended creator/company revenue split is 50/50. The calculation basis, payment costs, refunds, chargebacks, reserves, payout schedule, and taxes still need to be defined and published.
+- Never publish paid content or accept real funds until the services, compliance work, and operational controls listed below are complete.
 
 ## Stack
 
-- Next.js App Router + TypeScript, intended for Vercel
-- Neon Postgres schema in `db/schema.sql`
-- Private Amazon S3 media storage (short-lived signed URLs planned)
-- Stripe Checkout for token purchases and Stripe Connect for model payouts
-- Twilio Conversations for messaging, and Twilio Video for private calls and live broadcasts
-- Google and Facebook OAuth plus email/password reset in the planned auth layer
+- Next.js App Router + TypeScript
+- Neon Postgres, with the initial schema in `db/schema.sql`
+- Email/password authentication foundation using Node `scrypt`, Resend transactional email, opaque hashed sessions, and database-backed auth rate limits
+- Planned integrations: private S3 media storage, an eligible payment and payout provider, Twilio Conversations and Video
+
+OAuth buttons have been removed until their authorization and secure account-linking flows are implemented. Payment, S3, and Twilio packages are not currently wired into product routes.
 
 ## Local setup
 
-Use Node.js 20.9 or newer. Install dependencies, copy `.env.example` to `.env.local`, fill in credentials as integrations are implemented, then run:
+Use Node.js 20.9 or newer.
+
+1. Run `npm ci`.
+2. Copy `.env.example` to `.env.local` and fill in `DATABASE_URL`, a 32+ character random `AUTH_SECRET`, `APP_URL`, and the Resend sender credentials. Configure `YOTI_API_KEY` and `YOTI_SDK_ID` only for an approved Yoti environment.
+3. On a fresh database, apply `db/schema.sql`, then apply each SQL file in `db/migrations/` in filename order. Use a restricted server-only application database role. Do not expose database or provider credentials to browser code.
+4. Run `npm run dev` and open `http://localhost:3000`.
+
+The email registration flow creates pending accounts and sends verification links. After email verification, a user can sign in to a restricted session and start Yoti adult eligibility verification. Only a server-confirmed `OVER`/`COMPLETE` result activates the account. Local development can show the prototype portal after a verified active account is provisioned, but its warning banner identifies the data and actions as preview-only.
+
+Useful commands:
 
 ```bash
-npm install
-npm run dev
+npm run lint
+npm run typecheck
+npm run build
+npm start
 ```
 
-Open `http://localhost:3000`. You can navigate the public site, `/client`, `/model`, account screens, individual demo profiles, and legal documents without configuring provider credentials.
+GitHub Actions runs lint, type checking, and a production build on pushes and pull requests. There is not yet an automated behavior-test suite.
 
-## Product routes
+## Authentication foundation
 
-- `/` — public landing page and creator discovery preview
-- `/client` — client discovery; `/client/content`, `/client/messages`, `/client/broadcasts`, `/client/wallet`, `/client/settings`
-- `/model` — model dashboard and client discovery; `/model/media`, `/model/messages`, `/model/broadcasts`, `/model/wallet`, `/model/settings`
-- `/profiles/[slug]` — public profile preview with likes, comments, follow, and block UI
-- `/login`, `/register`, `/forgot-password` — account entry flows
-- `/legal/terms`, `/legal/privacy`, `/legal/safety`, `/legal/tokens`, `/legal/cookies`, `/legal/creators` — initial product policy drafts
+- Passwords are stored using Node's `scrypt`; reset and email-verification tokens are random, single-use, short-lived, and stored only as hashes.
+- Session cookies are `HttpOnly`, `SameSite=Lax`, and `Secure` in production. Session tokens are opaque, hashed in Postgres, and expire after seven days.
+- Mutating auth routes require a same-origin `Origin` header and validate their payloads. Auth attempts are limited in Postgres; the trusted deployment proxy must set `x-real-ip` correctly.
+- Client and creator route layouts check the server-side session, role, active status, verified email, and verified adult eligibility. Yoti sessions are tied to the signed-in user, provider session ID, SDK ID, and a random reference ID; result retrieval is rate limited and server-to-server.
+- Password reset revokes existing sessions. Sign-in responses avoid confirming whether an email address exists.
 
-## Data model
+This is a foundation, not a completed account-security review. OAuth, account linking, MFA, account recovery support, admin access, and security incident operations remain to be implemented as launch requirements dictate.
 
-`users` holds shared sign-in and account data. `client_profiles` and `model_profiles` are separate role-specific tables linked one-to-one to `users`. `wallets` plus the append-only `token_ledger` model token balance changes; use the `move_tokens` function inside trusted server-side transactions and verify Stripe webhooks before crediting a wallet. Never accept a balance supplied by the browser.
+## Database
 
-The schema includes content assets and purchases, conversations and messages, broadcasts and calls, profile likes and comments, blocks, reports, legal acceptances, and Stripe event idempotency. It is a starter schema, not yet a complete migration or production security policy.
+`db/schema.sql` defines the initial marketplace tables and token ledger. `db/migrations/0001_auth_foundation.sql` adds server sessions, email-verification tokens, auth rate limits, and immutable security audit records. `db/migrations/0002_yoti_age_verification.sql` adds minimal Yoti session state.
 
-## Payment-provider eligibility
+The SQL is not a complete production database deployment. Review constraints and permissions; create a least-privilege runtime role; ensure only server-side code can access auth, wallet, and verification tables; set up migration tracking and rollback practices; and rehearse backups and restores. The schema revokes public execution of the auth rate-limit and token-transfer functions. After creating the runtime role, grant it only the required table permissions and explicitly grant the needed function access, for example `GRANT EXECUTE ON FUNCTION public.consume_auth_rate_limit(text, integer, integer) TO mfs_app;` and `GRANT EXECUTE ON FUNCTION public.move_tokens(uuid, uuid, bigint, text, text, text, jsonb) TO mfs_app;`. Never accept balances, prices, role changes, or entitlements supplied by the browser.
 
-Stripe is the requested provider, but its current rules list content-creation platforms selling exclusive digital content as restricted and adult content/services as prohibited. The product must receive Stripe's written eligibility decision for its exact content and live-call model before any Checkout or Connect integration is activated. The token cash-out flow also needs provider/legal review. Keep payment actions in demo mode until then.
+`db/maintenance.sql` can be scheduled daily to remove expired sessions, one-time tokens, and rate-limit keys. Run it only after the operator finalizes retention requirements. Legal acceptances and security audit events are intentionally retained by this script.
 
-## Integration plan
+## Work remaining before a marketplace launch
 
-1. Add server-side session auth. Hash email passwords with a slow password-hashing function; use short-lived, hashed, single-use reset tokens. Configure Google and Facebook OAuth and prevent account-linking takeover. Require verified email and adult eligibility before restricted content access.
-2. Add Neon connection handling and server-only data access. Enforce role checks at every server action/API route and in database access patterns; never trust a role or price sent by the client.
-3. Add S3 presigned upload and download flows. Keep the bucket private, validate file size and MIME type server-side, scan/moderate files, store object keys rather than public URLs, and issue short-lived signed URLs only after checking an entitlement.
-4. Add Stripe Checkout with server-calculated token packs, webhook signature verification, idempotent ledger entries, refund/chargeback handling, and Stripe Connect onboarding and payouts. The £1/token value is the intended gross conversion; creator share, platform fees, Stripe costs, minimum payout, tax and refund policy still need a commercial decision.
-5. Create Twilio Conversations and mint chat access tokens on the server only. Mint Twilio Video access tokens on the server only. Create rooms, check block status and eligibility, charge by verified session time, and show the creator's per-minute rate plus the exact billing increment before join. For public broadcasts, add viewer admission, moderation and capacity controls.
-6. Add rate limits, abuse/report workflows, content moderation, account recovery, audit logs, data export/deletion, provider webhooks, observability, backup and retention routines, and accessibility testing before launch.
+### Operator and compliance decisions
 
-## Launch decisions still required
+- Confirm the operating entity, jurisdiction, launch markets, privacy and safety contacts, and support/appeal process.
+- Obtain jurisdiction-specific counsel review and replace every legal placeholder. Current pages are visibly marked as launch drafts.
+- Complete Yoti production onboarding and test every result and failure path. Have UK counsel/privacy specialists assess the age-assurance methods, Online Safety Act duties, data protection impact, biometric processing, notices, appeal flow, and retention. Ofcom's [age-assurance guidance](https://www.ofcom.org.uk/online-safety/protecting-children/age-assurance) describes the UK's highly effective age-assurance duties. The signup checkbox is only a declaration, not verification.
+- Design creator/person-in-content consent and release checks, copyright/DMCA intake, prohibited-content review, urgent safety escalation, moderation staffing, and evidence retention.
+- Replace Stripe with a provider that will support this exact adult content marketplace, or obtain explicit written approval from Stripe. Confirm UK marketplace, payout, money-transmission, consumer and tax treatment with the provider and qualified advisers before integration.
+- Publish the intended 50/50 creator/company split and define the calculation basis, payment costs, minimum payout, payout timing, tax responsibilities, refunds, chargebacks, reserves, token expiry, call billing increment/rounding, and failed-call handling.
 
-- Legal operator identity, operating jurisdiction(s), privacy contact, support/safety contacts, and complaint/appeal process.
-- Age/identity verification vendor and record-retention approach; the UI's age checkbox alone is not age verification.
-- Model commission, payout minimums/timing, provider/FX fee treatment, refund and chargeback allocation, tax reporting and token expiry policy.
-- Call billing granularity, rounding, minimum duration, connection-failure handling, and behavior on disconnect.
-- Moderation and DMCA/copyright intake process, content-record retention, restricted-region and payment-provider eligibility.
+### Product services
 
-All legal pages are launch drafts with explicit placeholders. They need review by counsel familiar with the operator's jurisdiction and the countries where members will be served. Do not accept real funds or publish monetised content until those details and the corresponding provider flows are complete.
+- Replace hardcoded discovery/profile examples and all local-only interactions with database-backed reads and writes.
+- Implement private media upload, server-side size/type checks, malware/content scanning, moderation, entitlement checks, short-lived signed access, and deletion/retention behavior.
+- Implement purchases using server-calculated prices, signed and idempotent webhooks, append-only ledger transfers, refund/chargeback reversals, reconciliation, and an approved creator payout flow.
+- Implement Twilio Conversations and Video with server-issued access tokens, block/age/role checks, broadcast admission and moderation, capacity controls, and verified session-time billing.
+- Add an authenticated admin console for reports, content review, account restrictions, appeals, support, audit search, and payment disputes.
+- Add durable report/block enforcement, spam and fraud controls, rate limits for public interactions, user export/deletion, notification delivery, and account closure workflows.
+
+### Operations and quality
+
+- Configure separate staging and production projects, production secrets, HTTPS domain settings, database connection limits, deployment approvals, rollback, and repeatable migrations.
+- Add automated unit, integration, and end-to-end coverage for auth, role boundaries, adult gates, content entitlements, ledger concurrency, webhooks, refunds, and moderation controls.
+- The final full npm audit reports five high-severity findings in the same development-only Next.js ESLint dependency chain (`braces`); the upstream advisory lists no patched version. The production dependency audit is clean, and CI now gates that production-only audit. Do not apply npm's suggested forced major downgrade; track the advisory and re-evaluate when upstream ships a fix.
+- Add error tracking, structured logs without secrets or unnecessary sensitive data, service metrics and alerts, incident response, backup retention, and restore drills.
+- Complete accessibility and responsive-device review. Test upload, billing, moderation, and account-recovery failure states.
+- Review dependencies and security headers when OAuth, payment, media, and video integrations are selected. The current CSP allows the prototype's Google Fonts and Unsplash assets and only same-origin API connections; integrations will require a deliberate allowlist update.
+- The current CSP permits inline scripts for the Next.js bootstrap. Move to a nonce-based script policy if the production deployment needs stricter script controls.
+
+## Production preview deployment
+
+For a marketing-only preview, keep `PUBLIC_SIGNUPS_ENABLED=false` and `MARKETPLACE_LAUNCH_READY=false`, use production credentials only for the services the preview actually needs, and do not present the hardcoded prototype profiles as real creators. The portal gate is an operational safeguard; setting it to `true` is not a compliance or feature-completion check.
