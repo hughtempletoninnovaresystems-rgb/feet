@@ -10,6 +10,7 @@ export async function sendTransactionalEmail(input: { to: string; subject: strin
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({ from, to: [input.to], subject: input.subject, text: input.text }),
     cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) throw new Error("Transactional email provider rejected the request.");
 }

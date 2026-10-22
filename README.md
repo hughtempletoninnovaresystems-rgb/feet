@@ -4,8 +4,8 @@ My Feet Show is a pre-production, UK-focused adults-only creator marketplace pro
 
 ## Current release gates
 
-- `PUBLIC_SIGNUPS_ENABLED` must remain `false` in production until legal, privacy, safeguarding, and UK age-assurance reviews are complete and the Didit production account and age-assurance workflow are configured and verified.
-- `MARKETPLACE_LAUNCH_READY` must remain `false` in production. Client and creator portal routes return to a launch-gate page unless it is explicitly enabled after all launch gates are met.
+- `PUBLIC_SIGNUPS_ENABLED` must remain `false` in production until legal, privacy, safeguarding, and UK age-assurance reviews are complete and the Didit production account and age-assurance workflow are configured and verified. Production registration also fails closed unless the database, auth secret, email, Didit credentials/webhook secret, and non-draft legal version settings are present.
+- `MARKETPLACE_LAUNCH_READY` must remain `false` in production. Client and creator portal routes return to a launch-gate page unless it is explicitly enabled after all launch gates are met and the same core production configuration is valid.
 - Didit age checks are created and retrieved server-side. The app activates an account only after the matching Didit session returns `Approved` and includes age-estimation evidence; it stores the result state and timestamp, not images or the full provider response. Configure a published Didit Adaptive Age Verification workflow with an 18+ threshold, facial age estimation, a challenge-age approach, and ID verification fallback for borderline cases. The API key, workflow ID, destination webhook secret, and end-to-end provider review still need to be configured. See [Didit's API flow](https://docs.didit.me/integration/api-full-flow), [webhook guide](https://docs.didit.me/integration/webhooks), [age-estimation guide](https://docs.didit.me/core-technology/age-estimation/overview), and Ofcom's [age-assurance guidance](https://www.ofcom.org.uk/online-safety/protecting-children/age-assurance).
 - Checkout and payouts are disabled. Stripe's current [published policy](https://stripe.com/legal/restricted-businesses) prohibits adult content and services and restricts content-creation platforms; do not configure or use Stripe for this product without written, product-specific approval. Select an eligible provider before enabling any real funds flow.
 - The intended creator/company revenue split is 50/50. The calculation basis, payment costs, refunds, chargebacks, reserves, payout schedule, and taxes still need to be defined and published.
@@ -40,7 +40,7 @@ npm run build
 npm start
 ```
 
-GitHub Actions runs lint, type checking, and a production build on pushes and pull requests. There is not yet an automated behavior-test suite.
+GitHub Actions checks that `.env.example` contains no credentials and keeps both release switches closed, then runs the production dependency audit, lint, type checking, and a production build on pushes and pull requests. There is not yet an automated behavior-test suite.
 
 ## Authentication foundation
 
@@ -48,7 +48,7 @@ GitHub Actions runs lint, type checking, and a production build on pushes and pu
 - Session cookies are `HttpOnly`, `SameSite=Lax`, and `Secure` in production. Session tokens are opaque, hashed in Postgres, and expire after seven days.
 - Mutating auth routes require a same-origin `Origin` header and validate their payloads. Auth attempts are limited in Postgres; the trusted deployment proxy must set `x-real-ip` correctly.
 - Client and creator route layouts check the server-side session, role, active status, verified email, and verified adult eligibility. Didit sessions are tied to the signed-in user and provider session ID; result retrieval is rate limited and server-to-server.
-- The Didit receiver at `/api/webhooks/didit` verifies the V2 canonical-body HMAC (or full raw-body HMAC fallback), then checks the signed body timestamp. Didit destinations have no wildcard; subscribe to `status.updated`, `data.updated`, `user.status.updated`, `user.data.updated`, `business.status.updated`, `business.data.updated`, `activity.created`, `transaction.created`, and `transaction.status.updated` as needed. Session status events update adult-verification state atomically with event-ID deduplication. Other event families are durably acknowledged for future integrations; this prototype has no entity or transaction product tables. Event payloads and identity evidence are not stored or logged.
+- The Didit receiver at `/api/webhooks/didit` verifies the V2 canonical-body HMAC (or full raw-body HMAC fallback), then checks the signed body timestamp. For this app, subscribe to `status.updated`; other Didit event families can be added later, but the prototype has no entity or transaction product tables. Session status events update adult-verification state atomically with event-ID deduplication. Event payloads and identity evidence are not stored or logged.
 - Password reset revokes existing sessions. Sign-in responses avoid confirming whether an email address exists.
 
 This is a foundation, not a completed account-security review. OAuth, account linking, MFA, account recovery support, admin access, and security incident operations remain to be implemented as launch requirements dictate.
@@ -89,7 +89,7 @@ The SQL is not a complete production database deployment. Review constraints and
 - Add error tracking, structured logs without secrets or unnecessary sensitive data, service metrics and alerts, incident response, backup retention, and restore drills.
 - Complete accessibility and responsive-device review. Test upload, billing, moderation, and account-recovery failure states.
 - Review dependencies and security headers when OAuth, payment, media, and video integrations are selected. The current CSP allows the prototype's Google Fonts and Unsplash assets and only same-origin API connections; integrations will require a deliberate allowlist update.
-- The current CSP permits inline scripts for the Next.js bootstrap. Move to a nonce-based script policy if the production deployment needs stricter script controls.
+- Production pages receive a per-request CSP nonce for Next.js scripts through the Next.js 16 proxy entrypoint. This keeps page HTML dynamic; review CSP origins whenever external integrations or assets are added.
 
 ## Production preview deployment
 

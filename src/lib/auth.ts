@@ -4,6 +4,7 @@ import { createHash, createHmac, randomBytes, scrypt as scryptCallback, timingSa
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { getDb, queryRows } from "@/lib/db";
+import { productionMarketplaceEnabled } from "@/lib/release-gates";
 
 const SESSION_COOKIE = process.env.NODE_ENV === "production" ? "__Host-mfs_session" : "mfs_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
@@ -163,6 +164,6 @@ export async function requireRole(role: "client" | "model") {
     notFound();
   }
   if (user.status !== "active" || !user.email_verified_at || !user.age_verified_at) redirect("/account-pending");
-  if (process.env.NODE_ENV === "production" && process.env.MARKETPLACE_LAUNCH_READY !== "true") redirect("/preview-only");
+  if (!productionMarketplaceEnabled()) redirect("/preview-only");
   return user;
 }

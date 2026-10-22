@@ -3,6 +3,7 @@ import { assertSameOrigin, enforceRateLimit, hashPassword, hashPrivateValue } fr
 import { jsonError, normalizedEmail, rateLimitResponse, readJson } from "@/lib/api";
 import { issueVerificationEmail } from "@/lib/auth-emails";
 import { getDb, queryRows } from "@/lib/db";
+import { productionSignupsEnabled } from "@/lib/release-gates";
 
 export const runtime = "nodejs";
 
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
     if (!process.env.RESEND_API_KEY || !process.env.EMAIL_FROM || !process.env.APP_URL) {
       return jsonError("Account registration is temporarily unavailable. Please try again later.", 503);
     }
-    if (process.env.NODE_ENV === "production" && process.env.PUBLIC_SIGNUPS_ENABLED !== "true") {
+    if (!productionSignupsEnabled()) {
       return jsonError("Registration will open after the operator completes the required legal, adult eligibility, and service setup.", 503);
     }
 

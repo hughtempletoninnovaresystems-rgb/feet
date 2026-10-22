@@ -14,7 +14,8 @@ export async function GET() {
       to_regclass('public.auth_rate_limits') IS NOT NULL AS rate_limits_ready,
       to_regclass('public.security_audit_events') IS NOT NULL AS audit_ready,
       to_regprocedure('public.consume_auth_rate_limit(text,integer,integer)') IS NOT NULL AS rate_limit_function_ready,
-      to_regclass('public.age_verification_sessions') IS NOT NULL AS age_verification_ready`);
+      to_regclass('public.age_verification_sessions') IS NOT NULL AS age_verification_ready,
+      to_regclass('public.didit_webhook_events') IS NOT NULL AS didit_webhooks_ready`);
     const state = rows[0];
     if (!state || Object.values(state).some((ready) => ready !== true)) {
       return Response.json({ status: "unavailable" }, { status: 503, headers: { "Cache-Control": "no-store" } });
