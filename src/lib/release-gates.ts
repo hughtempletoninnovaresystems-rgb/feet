@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getDiditCredentials } from "@/lib/didit";
+import { getSegpayPaymentPageUrl, getSegpayWebhookCredentials } from "@/lib/segpay";
 
 function hasFinalLegalVersion(value: string | undefined) {
   const version = value?.trim();
@@ -33,7 +34,7 @@ export function productionMarketplaceEnabled() {
   const accessKeyId = process.env.AWS_ACCESS_KEY_ID?.trim();
   const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY?.trim();
   const privateStorageReady = Boolean(process.env.AWS_REGION?.trim() && process.env.S3_BUCKET_NAME?.trim()) && Boolean(accessKeyId) === Boolean(secretAccessKey);
-  const paymentReady = process.env.PAYMENT_PROVIDER_APPROVED === "true" && process.env.PAYMENT_INTEGRATION_READY === "true" && Boolean(process.env.PAYMENT_PROVIDER?.trim()) && process.env.PAYMENT_PROVIDER?.trim().toLowerCase() !== "stripe";
+  const paymentReady = process.env.PAYMENT_PROVIDER_APPROVED === "true" && process.env.PAYMENT_INTEGRATION_READY === "true" && Boolean(getSegpayPaymentPageUrl()) && Boolean(getSegpayWebhookCredentials());
   const safetyReady = process.env.MODERATION_OPERATIONS_READY === "true" && process.env.CONTENT_SCANNING_READY === "true";
   const twilioReady = Boolean(
     process.env.TWILIO_ACCOUNT_SID?.trim() && process.env.TWILIO_API_KEY?.trim() &&

@@ -1,0 +1,24 @@
+# Segpay provider setup
+
+Segpay is the provider selected for underwriting. This repository has a protected transaction-postback receiver at `/api/webhooks/segpay`; the receiver stores a minimal audit record only. It does not create checkout sessions, issue token credits, unlock content, reverse ledger entries, or pay creators. Keep all payment and marketplace launch switches off.
+
+## Merchant approval and account setup
+
+1. Apply through [Segpay](https://segpay.com/) using the actual UK operating entity and describe the service accurately as an adult creator marketplace. Obtain written approval for user purchases, creator marketplace funds flow, the proposed creator/company share, refunds, chargebacks, and creator payouts. Confirm the reserve, transaction and payout fees, payout timing, and required creator checks in the written quote and agreement.
+2. Do not put real customers through checkout until the provider and qualified UK advisers have approved the business model, funds flow, consumer terms, tax handling, and payout arrangement. Segpay account setup is not legal sign-off.
+3. Complete these account steps in the Segpay Merchant Portal only after underwriting. The merchant login and account-specific package links are not available from this repository.
+
+## Hosted page and postback configuration
+
+1. In **My Websites → Manage Packages**, create the approved GBP package(s), initially in Segpay test mode. Copy the hosted payment page Base URL for the relevant package. It should use HTTPS and include an account-specific `x-eticketid`, for example `https://secure2.segpay.com/billing/poset.cgi?x-eticketid=...`.
+2. In **My Websites → Manage Postbacks**, add an asynchronous **Transaction Postback** pointing to `https://<your-production-host>/api/webhooks/segpay`. Use the password-protected-script username and password fields for HTTP Basic authentication. Keep these separate from your login credentials and use different values for staging and production.
+3. Configure only the transaction fields the receiver needs. Segpay's postback may include customer contact and billing details, so do not select or forward those fields. The receiver accepts `trantype`, `action`, `stage`, `approved`, `purchaseid`, `tranid`, `relatedtranid`, `price`, `currencycode`, `eticketid`, and optional `REF1`. These fields allow the event to be recorded without storing the full customer payload.
+4. Enable postback retries and failed-postback email notifications in the portal; Segpay documents hourly retries for transaction postbacks for up to 12 hours. Use the ordinary HTTP success status as the expected result for the asynchronous transaction postback. The endpoint returns HTTP 204 after its database writes commit; it returns an error when credentials, fields, or database persistence fail, so Segpay can retry.
+5. Put the package Base URL into `SEGPAY_PAYMENT_PAGE_URL`, and the portal's Basic-auth values into `SEGPAY_POSTBACK_USERNAME` and `SEGPAY_POSTBACK_PASSWORD`. Keep these in the deployment secret store; never commit them or expose them to browser code. The Base URL must be HTTPS on a `*.segpay.com` host and use `/billing/poset.cgi`.
+6. Test from Segpay test mode in a staging deployment with its own database and credentials. Confirm that approved, declined, refund, void, and chargeback notices create one row per distinct transaction event in `payment_provider_events` and `segpay_postback_events`. Confirm retries do not create duplicates and payloads with customer details are not retained.
+
+## Payments are still not implemented
+
+The current wallet shows example packages and token pricing is not finalized. Define the real price catalog and GBP-to-token rules first. Then implement server-created payment intents, bind each intent to a Segpay transaction reference, verify the paid amount/currency/package against the intent, and grant entitlement through the append-only ledger in an idempotent database transaction. Add refund and chargeback reversals, reconciliation against Segpay reports, dispute handling, payout operations, and finance alerts. Obtain review of the full flow before changing `PAYMENT_PROVIDER_APPROVED`, `PAYMENT_INTEGRATION_READY`, or `MARKETPLACE_LAUNCH_READY`.
+
+Segpay documents its [hosted payment page parameters](https://gethelp.segpay.com/docs/Content/DeveloperDocs/ProcessingAPI/02-Parameters-PopulateFields.htm), [postback configuration and transaction fields](https://gethelp.segpay.com/docs/Content/DeveloperDocs/ProcessingAPI/06-Postbacks.htm), [transaction result matrix](https://gethelp.segpay.com/docs/Content/DeveloperDocs/ProcessingAPI/Postbacks-TransactionMatrix.htm), and [test mode](https://gethelp.segpay.com/docs/Content/DeveloperDocs/ProcessingAPI/10-TestingPayments.htm). The Merchant Portal is available to approved merchants at [mp.segpay.com](https://mp.segpay.com/).
