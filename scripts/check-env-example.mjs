@@ -25,9 +25,6 @@ const blankVariables = [
   "DIDIT_API_KEY",
   "DIDIT_WORKFLOW_ID",
   "DIDIT_WEBHOOK_SECRET",
-  "SEGPAY_PAYMENT_PAGE_URL",
-  "SEGPAY_POSTBACK_USERNAME",
-  "SEGPAY_POSTBACK_PASSWORD",
   "AWS_ACCESS_KEY_ID",
   "AWS_SECRET_ACCESS_KEY",
   "S3_BUCKET_NAME",
@@ -42,7 +39,7 @@ for (const key of blankVariables) {
   if (entries.get(key) !== "") throw new Error(`Credentials and service values must stay blank in .env.example: ${key}`);
 }
 
-if (entries.get("PAYMENT_PROVIDER") !== "segpay") throw new Error("The selected payment provider must be Segpay.");
+if (entries.get("PAYMENT_PROVIDER") !== "forumpay") throw new Error("The selected payment provider must be ForumPay.");
 if (!/^v\d+\.\d+$/.test(entries.get("FACEBOOK_GRAPH_API_VERSION") ?? "")) throw new Error("FACEBOOK_GRAPH_API_VERSION must use the vNN.N format.");
 
 for (const key of ["PUBLIC_SIGNUPS_ENABLED", "MARKETPLACE_LAUNCH_READY", "LEGAL_SIGNOFF_COMPLETE", "UK_AGE_ASSURANCE_SIGNED_OFF", "MODERATION_OPERATIONS_READY", "CONTENT_SCANNING_READY", "PAYMENT_PROVIDER_APPROVED", "PAYMENT_INTEGRATION_READY"]) {
