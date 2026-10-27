@@ -22,15 +22,15 @@ requested -> accepted -> connecting -> active -> ending -> ended (or declined/ex
 ## Wallet and accounting
 - Ledger entries are immutable, denominated in integer pence, with unique idempotency keys.
 - Separate available, reserved and pending balances; prevent concurrent sessions spending the same funds.
-- Top-ups become spendable only on verified, reconciled payment-provider settlement under its approved stored-value model.
+- ForumPay payments become spendable only after verified, reconciled settlement, and only if ForumPay explicitly supports the proposed wallet/stored-value model.
 - Authorise/reserve funds atomically before joining; settle by elapsed billable seconds at the locked per-minute rate.
 - Refund unused reserve on completion; do not create funds from untrusted client or webhook events.
 - Split eligible settled revenue 80/20; track refunds, chargebacks, processor fees, payout holds and reconciliations separately.
-- Withdrawal requests require verified creator eligibility and provider-approved payouts.
+- Withdrawal requests require verified creator eligibility and a separately approved creator-payout route; do not assume ForumPay offers marketplace payouts.
 
 ## Safety and release blockers
 - Keep PUBLIC_SIGNUPS_ENABLED, MARKETPLACE_LAUNCH_READY and PAYMENT_INTEGRATION_READY false until existing sign-offs are independently completed.
-- Written Twilio approval for explicit paid one-to-one video and written Segpay underwriting approval are required.
+- Written Twilio approval for explicit paid one-to-one video and written ForumPay approval for this exact adult marketplace and payment flow are required.
 - UK age assurance, identity checks, consent, reporting, blocking, moderation, incident response and retention policies must be operational.
 - No production wallet credits, live billing or video access until integration and tests pass.
 
@@ -40,3 +40,8 @@ requested -> accepted -> connecting -> active -> ending -> ended (or declined/ex
 3. UI: creator rate settings, discovery price labels, customer wallet, call screen with independent AV toggles, countdown, warning and leave button.
 4. Safety: reporting/blocking, audit events, abuse prevention and provider-specific release gates.
 5. Tests: concurrency, idempotency, rounding, interrupted calls, reconnects, insufficient funds, declined sessions, refunds and commission split.
+
+## Payment provider decision
+- ForumPay is the selected payment provider; remove Segpay from the target integration architecture entirely.
+- Confirm ForumPay approval for UK sole-trader adult marketplace payments, pay-per-minute charging, refunds, chargebacks, wallet balances and any third-party creator payouts before enabling each feature.
+- No fallback to Segpay or Stripe without a new explicit product decision.
