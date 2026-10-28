@@ -213,3 +213,12 @@ test("eligible sandbox buyers reach test checkout while production stays gated",
   user = { ...user, role: "model" };
   assert.ok(await page.default());
 });
+
+test("transaction discovery accepts the live invoices envelope", async () => {
+  const api = load("src/lib/forumpay.ts", { fetch: async () =>
+    Response.json({ invoices: [{ payment_id: "provider-payment", pos_id: "widget", currency: "BTC", address: "sandbox-address" }] })
+  }, credentials);
+  const rows = await api.findForumPaySandboxTransactions("stored-reference");
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].payment_id, "provider-payment");
+});

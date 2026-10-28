@@ -124,6 +124,9 @@ export async function createForumPaySandboxLink(order: { id: string; amountPence
 
 export async function findForumPaySandboxTransactions(reference: string) {
   const result = await requestForumPay("GetTransactions", "GET", { reference_no: reference, limit: "50" });
-  if (!Array.isArray(result)) throw new Error("Invalid ForumPay transaction list.");
-  return result;
+  const rows = Array.isArray(result) ? result : result.invoices;
+  if (!Array.isArray(rows) || rows.some(row => !row || typeof row !== "object" || Array.isArray(row))) {
+    throw new Error("Invalid ForumPay transaction list.");
+  }
+  return rows as Record<string, unknown>[];
 }

@@ -36,7 +36,7 @@ if (process.env.FORUMPAY_SANDBOX_VALIDATE_API !== "true") {
     status: transactionResponse.status, array: Array.isArray(transactions),
     fields: Object.keys(transactions ?? {}),
     code: typeof transactions.code === "string" ? transactions.code : null,
-    rowFields: Array.isArray(transactions) && transactions.length ? Object.keys(transactions[0]) : null,
-    posIds: Array.isArray(transactions) ? transactions.map(row => row.pos_id) : null,
+    rowFields: Array.isArray(transactions.invoices) && transactions.invoices.length ? Object.keys(transactions.invoices[0]) : null,
+    posIds: Array.isArray(transactions.invoices) ? transactions.invoices.map(row => row.pos_id) : null,
   });
 }
