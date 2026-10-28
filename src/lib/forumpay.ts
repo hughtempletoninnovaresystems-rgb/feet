@@ -11,7 +11,7 @@ export function getForumPayConfiguration() {
   return { username, password, posId };
 }
 
-async function requestForumPay(endpoint: "StartPayment" | "CheckPayment" | "CreatePaymentLink" | "Ping", method: "GET" | "POST", fields: Record<string, string>): Promise<Record<string, unknown>> {
+async function requestForumPay(endpoint: "StartPayment" | "CheckPayment" | "CreatePaymentLink" | "Ping" | "GetTransactions", method: "GET" | "POST", fields: Record<string, string>): Promise<Record<string, unknown> | Record<string, unknown>[]> {
   const config = getForumPayConfiguration();
   if (!config) throw new Error("ForumPay sandbox credentials are not configured.");
   const params = new URLSearchParams({ ...fields, pos_id: config.posId });
@@ -31,7 +31,11 @@ async function requestForumPay(endpoint: "StartPayment" | "CheckPayment" | "Crea
   });
   if (!response.ok) throw new Error("ForumPay API request failed.");
   const data: unknown = await response.json();
-  if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("Invalid ForumPay API response.");
+  if (!data || typeof data !== "object") throw new Error("Invalid ForumPay API response.");
+  if (Array.isArray(data)) {
+    if (endpoint !== "GetTransactions" || data.some(row => !row || typeof row !== "object" || Array.isArray(row))) throw new Error("Invalid ForumPay API response.");
+    return data as Record<string, unknown>[];
+  }
   const result = data as Record<string, unknown>;
   // Provider errors may contain sensitive context; do not relay the raw response.
   if ("err" in result) throw new Error("ForumPay rejected the API request.");
@@ -68,11 +72,13 @@ export async function startForumPaySandboxPayment(order: ForumPayOrder) {
 // Use identifiers from the persisted order, never blindly from a webhook.
 export async function checkForumPaySandboxPayment(payment: { paymentId: string; currency: string; address: string }) {
   if (!payment.paymentId || !payment.currency || !payment.address) throw new Error("Missing ForumPay payment identifiers.");
-  return requestForumPay("CheckPayment", "GET", {
+  const result = await requestForumPay("CheckPayment", "GET", {
     payment_id: payment.paymentId,
     currency: payment.currency,
     address: payment.address,
   });
+  if (Array.isArray(result)) throw new Error("Invalid ForumPay payment response.");
+  return result;
 }
 
 // Credentials and operator switches do not establish integration readiness.
@@ -92,7 +98,7 @@ export function forumPaySandboxEnabled() {
 export async function createForumPaySandboxLink(order: { id: string; amountPence: number }) {
   const origin = new URL(process.env.APP_URL ?? "");
   if (origin.protocol !== "https:" || origin.username || origin.password) throw new Error("Configure a secure sandbox APP_URL.");
-  return requestForumPay("CreatePaymentLink", "POST", {
+  const result = await requestForumPay("CreatePaymentLink", "POST", {
     webhook_url: new URL("/api/webhooks/forumpay", origin).href,
     redirect_url_on_success: new URL("/sandbox/checkout", origin).href,
     redirect_url_on_failure: new URL("/sandbox/checkout", origin).href,
@@ -108,4 +114,13 @@ export async function createForumPaySandboxLink(order: { id: string; amountPence
     auto_accept_late_payment: "false",
     auto_accept_other_currency: "false",
   });
+  if (Array.isArray(result)) throw new Error("Invalid ForumPay checkout response.");
+  return result;
+}
+
+
+export async function findForumPaySandboxTransactions(reference: string) {
+  const result = await requestForumPay("GetTransactions", "GET", { reference_no: reference, limit: "50" });
+  if (!Array.isArray(result)) throw new Error("Invalid ForumPay transaction list.");
+  return result;
 }

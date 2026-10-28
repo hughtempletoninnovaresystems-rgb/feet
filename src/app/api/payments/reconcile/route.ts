@@ -12,7 +12,8 @@ export async function POST(request: Request) {
   if (!secret || secret.length < 32 || expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) return jsonError("Unauthorized.", 401);
   if (!forumPaySandboxEnabled()) return jsonError("Sandbox disabled.", 503);
   const sql = getDb();
-  const orders = queryRows<{ order_id: string }>(await sql`SELECT DISTINCT order_id FROM forumpay_sandbox_notifications WHERE processed_at IS NULL AND attempts < 20 LIMIT 20`);
+  const orders = queryRows<{ order_id: string }>(await sql`SELECT id AS order_id FROM forumpay_sandbox_orders
+    WHERE state IN ('pending','creating','review') ORDER BY updated_at LIMIT 20`);
   let completed = 0;
   for (const order of orders) {
     try { await reconcileSandboxOrder(order.order_id); completed++; } catch { /* Keep durable receipt available for retry. */ }

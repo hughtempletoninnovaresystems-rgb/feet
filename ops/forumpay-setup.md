@@ -35,7 +35,7 @@ Live sandbox calls still require configured API credentials and network access t
 
 1. Apply db/migrations/0007_forumpay_sandbox_checkout.sql after the preceding migrations to the Preview database. The migration creates isolated test orders, an immutable test-credit ledger, and a durable notification inbox. Do not share a production database for testing.
 2. Configure the three ForumPay API variables and PAYMENT_PROVIDER=forumpay for Preview. Set FORUMPAY_SANDBOX_CHECKOUT_ENABLED=true only for Preview. VERCEL_ENV must be preview; production and local environments cannot enable this flow.
-3. APP_URL must be the HTTPS origin of the intended preview. It is used for same-origin protection, payment redirects, and the payment-specific webhook URL. Ensure ForumPay can reach /api/webhooks/forumpay; Vercel authentication protection must not intercept these server-to-server callbacks.
+3. APP_URL must be the HTTPS origin of the intended preview. It is used for same-origin protection, payment redirects, and the payment-specific webhook URL. Authenticated GetTransactions polling supplies payment identifiers even when Vercel protection blocks callbacks. CheckPayment still validates the reference and amount before any test credit; deployment protection can remain enabled.
 4. Deploy the tested branch as a Preview and sign in with an active, email-verified, age-verified client account. Open /sandbox/checkout. The package is £10 for 100 test tokens, matching the operator's chosen pricing.
 5. Create an order and follow its explicit Open ForumPay test payment link. Use only ForumPay's documented sandbox payment simulation. Confirmation appears after a verified notification and status refresh. Closing checkout or returning from ForumPay never proves payment.
 6. For reconciliation when the payer leaves, set a random 32+ character FORUMPAY_RECONCILIATION_SECRET and invoke POST /api/payments/reconcile periodically from a trusted scheduler with Authorization: Bearer <secret>. Keep this token server-side. Failed checks remain in the durable inbox for retry, up to 20 attempts; inspect unresolved receipts operationally.
@@ -46,3 +46,12 @@ The sandbox build does not enable production payments. Real wallet funding, refu
 ## Automated verification
 
 Run npm run test:payments (Node tests, mocked HTTP API and an actual in-process PostgreSQL engine via PGlite), npm run typecheck, npm run build, and npm run check:env-example. Tests cover immutable credit records, concurrent/repeated reconciliation, forged references, amount/currency mismatches, strict confirmation booleans, sandbox-host validation, provider errors, authorization, same-origin requests, and unsigned webhook persistence.
+
+
+## Branch-scoped setup automation
+
+The prebuild hook is inert unless its branch-specific flags are enabled. FORUMPAY_SANDBOX_VALIDATE_API=true runs read-only Ping and Me requests using Vercel's existing sandbox credentials, and verifies can_sell permission without printing credentials.
+
+After creating a separate Neon branch/database, set a branch-specific Preview DATABASE_URL for codex/forumpay-sandbox-checkout. Only then set FORUMPAY_SANDBOX_DATABASE_ISOLATED=true and FORUMPAY_SANDBOX_MIGRATE=true for that branch. The prebuild hook applies migration 0007 atomically under a PostgreSQL advisory lock, verifies the three tables, and fails closed if prerequisites are absent. It refuses to run outside Preview or the checkout branch. After the successful rollout, turn FORUMPAY_SANDBOX_MIGRATE off.
+
+Do not enable the isolation confirmation flag while Preview and Production share a database. The operator confirmed on 2026-10-28 that the existing Preview DATABASE_URL currently shares Production, so a separate Neon branch is required before migration.

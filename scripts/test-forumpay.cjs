@@ -89,7 +89,7 @@ test("database reconciliation credits exactly once and rejects forged or mismatc
     const service = load("src/lib/forumpay-checkout.ts", {
       "@/lib/auth": {}, "@/lib/api": {},
       "@/lib/db": { getDb: () => sql, queryRows: rows => rows },
-      "@/lib/forumpay": { checkForumPaySandboxPayment: async () => provider },
+      "@/lib/forumpay": { findForumPaySandboxTransactions: async () => [], checkForumPaySandboxPayment: async () => provider },
       "@/lib/forumpay-validation": validation,
     });
     const insert = async id => db.query("INSERT INTO forumpay_sandbox_notifications(id,order_id,payment_id,currency,address) VALUES ($1,$2,'payment-1','BTC','address')", [id, order]);
@@ -166,4 +166,30 @@ test("payment status does not verify another user's order", async () => {
   const response = await route.GET(new Request("https://checkout.example.com"), { params: Promise.resolve({ orderId: "11111111-1111-4111-8111-111111111111" }) });
   assert.equal(response.status, 404);
   assert.equal(verified, false);
+});
+
+test("transaction discovery uses the authenticated API with the stored order reference", async () => {
+  let requested;
+  const api = load("src/lib/forumpay.ts", { fetch: async url => {
+    requested = url;
+    return Response.json([{ payment_id: "p", currency: "BTC", address: "a" }]);
+  } }, credentials);
+  const rows = await api.findForumPaySandboxTransactions("stored-reference");
+  assert.equal(requested.pathname, "/pay/v2/GetTransactions/");
+  assert.equal(requested.searchParams.get("reference_no"), "stored-reference");
+  assert.equal(requested.searchParams.get("pos_id"), "WEB1");
+  assert.equal(rows[0].payment_id, "p");
+});
+
+test("migration and API validation refuse production even if setup flags are enabled", () => {
+  const { spawnSync } = require("node:child_process");
+  for (const file of ["migrate-forumpay-sandbox.mjs", "validate-forumpay-sandbox.mjs"]) {
+    const result = spawnSync(process.execPath, ["scripts/" + file], {
+      env: { ...process.env, VERCEL_ENV: "production", VERCEL_GIT_COMMIT_REF: "codex/forumpay-sandbox-checkout",
+        FORUMPAY_SANDBOX_DATABASE_ISOLATED: "true", FORUMPAY_SANDBOX_MIGRATE: "true", FORUMPAY_SANDBOX_VALIDATE_API: "true" },
+      encoding: "utf8",
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Preview/);
+  }
 });

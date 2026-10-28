@@ -1,8 +1,9 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { getSessionUser, enforceRateLimit } from "@/lib/auth";
 import { jsonError, rateLimitResponse } from "@/lib/api";
 import { getDb, queryRows } from "@/lib/db";
-import { checkForumPaySandboxPayment, forumPaySandboxEnabled } from "@/lib/forumpay";
+import { checkForumPaySandboxPayment, findForumPaySandboxTransactions, forumPaySandboxEnabled } from "@/lib/forumpay";
 import { verifiedPaymentMatches } from "@/lib/forumpay-validation";
 
 export async function sandboxBuyer(request: Request) {
@@ -18,7 +19,20 @@ export async function sandboxBuyer(request: Request) {
 
 export async function reconcileSandboxOrder(orderId: string) {
   const sql = getDb();
-  // Only identifiers durably saved by the notification inbox are used.
+  const current = queryRows<{ state: string }>(await sql`SELECT state FROM forumpay_sandbox_orders WHERE id = ${orderId}`)[0];
+  if (!current || current.state === "confirmed") return;
+  // Discover payment identifiers via the authenticated API even if deployment
+  // protection blocks callbacks. CheckPayment still verifies the reference.
+  const transactions = await findForumPaySandboxTransactions(orderId);
+  for (const payment of transactions) {
+    if (typeof payment.payment_id !== "string" || typeof payment.currency !== "string" ||
+        typeof payment.address !== "string" || !payment.address) continue;
+    const id = createHash("sha256").update(JSON.stringify([orderId, payment.payment_id, payment.currency, payment.address])).digest("hex");
+    await sql`INSERT INTO forumpay_sandbox_notifications(id, order_id, payment_id, currency, address)
+      VALUES (${id}, ${orderId}, ${payment.payment_id}, ${payment.currency}, ${payment.address})
+      ON CONFLICT (id) DO NOTHING`;
+  }
+  // Only identifiers durably saved in the inbox are used for final verification.
   const notifications = queryRows<{ id: string; payment_id: string; currency: string; address: string }>(await sql`
     SELECT id, payment_id, currency, address FROM forumpay_sandbox_notifications
     WHERE order_id = ${orderId} AND processed_at IS NULL AND attempts < 20
