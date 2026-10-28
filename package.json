@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "check:env-example": "node scripts/check-env-example.mjs",
     "test:payments": "node --test scripts/test-forumpay.cjs",
-    "prebuild": "node scripts/validate-forumpay-sandbox.mjs && node scripts/migrate-forumpay-sandbox.mjs && node scripts/smoke-forumpay-checkout.mjs"
+    "prebuild": "node scripts/validate-forumpay-sandbox.mjs && node scripts/migrate-forumpay-sandbox.mjs && node scripts/smoke-forumpay-checkout.mjs && node scripts/test-forumpay-webhook-live.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.900.0",

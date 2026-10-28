@@ -20,7 +20,12 @@ export async function sandboxBuyer(request: Request) {
 export async function reconcileSandboxOrder(orderId: string) {
   const sql = getDb();
   const current = queryRows<{ state: string }>(await sql`SELECT state FROM forumpay_sandbox_orders WHERE id = ${orderId}`)[0];
-  if (!current || current.state === "confirmed") return;
+  if (!current) return;
+  if (current.state === "confirmed") {
+    // No money movement is repeated. Already-confirmed orders need no API call.
+    await sql`UPDATE forumpay_sandbox_notifications SET processed_at = COALESCE(processed_at, now()) WHERE order_id = ${orderId}`;
+    return;
+  }
   // Discover payment identifiers via the authenticated API even if deployment
   // protection blocks callbacks. CheckPayment still verifies the reference.
   const transactions = await findForumPaySandboxTransactions(orderId);

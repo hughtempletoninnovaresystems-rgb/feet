@@ -77,6 +77,7 @@ test("database reconciliation credits exactly once and rejects forged or mismatc
       CREATE FUNCTION prevent_token_ledger_mutation() RETURNS trigger LANGUAGE plpgsql AS $$
       BEGIN RAISE EXCEPTION 'immutable'; END $$;`);
     await db.exec(fs.readFileSync("db/migrations/0007_forumpay_sandbox_checkout.sql", "utf8"));
+    await db.exec(fs.readFileSync("db/migrations/0008_forumpay_webhook_delivery.sql", "utf8"));
     // Migration can safely be run twice.
     await db.exec(fs.readFileSync("db/migrations/0007_forumpay_sandbox_checkout.sql", "utf8"));
     const user = "11111111-1111-4111-8111-111111111111";
@@ -116,6 +117,25 @@ test("database reconciliation credits exactly once and rejects forged or mismatc
     assert.equal(credits[0].tokens, 100);
     assert.equal((await db.query("SELECT state FROM forumpay_sandbox_orders")).rows[0].state, "confirmed");
     await assert.rejects(db.query("DELETE FROM forumpay_sandbox_credits"), /immutable/);
+    const webhook = load("src/app/api/webhooks/forumpay/route.ts", {
+      "next/server": { after: () => {} },
+      "@/lib/forumpay-checkout": { reconcileSandboxOrder: async () => {} },
+      "@/lib/api": { jsonError: (error, status) => Response.json({ error }, { status }), readJson: r => r.json() },
+      "@/lib/db": { getDb: () => sql },
+      "@/lib/forumpay": { forumPaySandboxEnabled: () => true, getForumPayConfiguration: () => ({ posId: "WEB1" }) },
+    });
+    const deliver = () => webhook.POST(new Request("https://checkout.example.com/api/webhooks/forumpay", {
+      method: "POST", body: JSON.stringify({ reference_no: order, payment_id: "payment-1", currency: "BTC", address: "address", pos_id: "widget" }),
+    }));
+    assert.equal((await deliver()).status, 200);
+    assert.equal((await deliver()).status, 200);
+    await service.reconcileSandboxOrder(order);
+    const receiptBefore = (await db.query("SELECT processed_at FROM forumpay_sandbox_notifications WHERE delivery_count=2")).rows[0];
+    assert.ok(receiptBefore.processed_at);
+    assert.equal((await deliver()).status, 200);
+    const receipt = (await db.query("SELECT delivery_count, processed_at FROM forumpay_sandbox_notifications WHERE delivery_count=3")).rows[0];
+    assert.ok(receipt.processed_at);
+    assert.equal((await db.query("SELECT count(*)::int AS count FROM forumpay_sandbox_credits")).rows[0].count, 1);
   } finally { await db.close(); }
 });
 
@@ -143,6 +163,8 @@ test("checkout rejects unauthenticated users, forged prices and unknown packages
 test("unsigned webhook durably enqueues without calling provider or issuing credits", async () => {
   let writes = 0;
   const route = load("src/app/api/webhooks/forumpay/route.ts", {
+    "next/server": { after: () => {} },
+    "@/lib/forumpay-checkout": { reconcileSandboxOrder: async () => {} },
     "@/lib/api": { jsonError: (error, status) => Response.json({ error }, { status }), readJson: r => r.json() },
     "@/lib/db": { getDb: () => async () => { writes++; return []; } },
     "@/lib/forumpay": { forumPaySandboxEnabled: () => true, getForumPayConfiguration: () => ({ posId: "WEB1" }) },

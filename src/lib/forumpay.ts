@@ -100,8 +100,11 @@ export async function createForumPaySandboxLink(order: { id: string; amountPence
   if (!/^[A-Za-z0-9._-]{1,64}$/.test(order.payerId)) throw new Error("Invalid sandbox payer.");
   const origin = new URL(process.env.APP_URL ?? "");
   if (origin.protocol !== "https:" || origin.username || origin.password) throw new Error("Configure a secure sandbox APP_URL.");
+  const webhook = new URL("/api/webhooks/forumpay", origin);
+  const bypass = process.env.FORUMPAY_WEBHOOK_BYPASS_SECRET;
+  if (process.env.VERCEL_ENV === "preview" && bypass) webhook.searchParams.set("x-vercel-protection-bypass", bypass);
   const result = await requestForumPay("CreatePaymentLink", "POST", {
-    webhook_url: new URL("/api/webhooks/forumpay", origin).href,
+    webhook_url: webhook.href,
     redirect_url_on_success: new URL("/sandbox/checkout", origin).href,
     redirect_url_on_failure: new URL("/sandbox/checkout", origin).href,
     invoice_amount: (order.amountPence / 100).toFixed(2),

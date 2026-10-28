@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { reconcileSandboxOrder } from "@/lib/forumpay-checkout";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { jsonError, readJson } from "@/lib/api";
@@ -21,10 +23,16 @@ export async function POST(request: Request) {
     // Durably enqueue only. The authenticated CheckPayment API establishes trust,
     // never this unsigned payload. No wallet mutation happens in this handler.
     const sql = getDb();
-    await sql`INSERT INTO forumpay_sandbox_notifications(id, order_id, payment_id, currency, address)
-      SELECT ${id}, id, ${event.payment_id}, ${event.currency}, ${event.address}
+    await sql`INSERT INTO forumpay_sandbox_notifications(id, order_id, payment_id, currency, address, delivery_count, last_delivery_at)
+      SELECT ${id}, id, ${event.payment_id}, ${event.currency}, ${event.address}, 1, now()
       FROM forumpay_sandbox_orders WHERE id = ${event.reference_no}
-      ON CONFLICT (id) DO UPDATE SET processed_at = NULL, attempts = 0`;
+      ON CONFLICT (id) DO UPDATE SET
+        delivery_count = forumpay_sandbox_notifications.delivery_count + 1,
+        last_delivery_at = now()`;
+    after(async () => {
+      try { await reconcileSandboxOrder(event.reference_no); }
+      catch { /* Durable inbox remains available to polling/reconciliation. */ }
+    });
     return new Response("OK", { status: 200, headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof SyntaxError) return jsonError("Invalid JSON.", 400);
