@@ -237,7 +237,7 @@ test("eligible sandbox buyers reach test checkout while production stays gated",
     "next/link": { default: () => null },
     "next/navigation": { redirect: path => { throw new Error("redirect:" + path); } },
     "@/lib/auth": { getSessionUser: async () => user },
-    "@/lib/forumpay": { forumPaySandboxEnabled: () => enabled },
+    "@/lib/forumpay": { forumPaySandboxEnabled: () => enabled, forumPaySandboxPayoutsEnabled: () => false },
   });
   await assert.rejects(page.default(), /redirect:\/sandbox\/checkout/);
   // Disabled production and ineligible visitors keep the marketplace gate.
@@ -255,4 +255,45 @@ test("transaction discovery accepts the live invoices envelope", async () => {
   const rows = await api.findForumPaySandboxTransactions("stored-reference");
   assert.equal(rows.length, 1);
   assert.equal(rows[0].payment_id, "provider-payment");
+});
+
+test("payout validation matches creator, amount, recipient, currency and provider ID", () => {
+  const rules=load("src/lib/forumpay-payout-validation.ts",{"@/lib/forumpay-validation":validation});
+  const payout={id:"order",creator_id:"creator",provider_id:"provider",amount_pence:800,address:"btc-"+"a".repeat(32)};
+  const tx={currency:"BTC",address:payout.address,payer_id:"creator",reference_no:"order",invoice_currency:"GBP",approx_invoice_amount:"8.00",amount:"0.0001",status:"pending"};
+  const data={id:"provider",fee_type:"fixed_in",transactions:[tx]};
+  assert.ok(rules.validateSandboxPayout(data,payout));
+  for(const patch of [{address:"btc-"+"b".repeat(32)},{reference_no:"other"},{payer_id:"other"},{invoice_currency:"USD"},{approx_invoice_amount:"8.01"},{currency:"ETH"},{amount:"0"}]){
+    assert.equal(rules.validateSandboxPayout({...data,transactions:[{...tx,...patch}]},payout),null);
+  }
+  assert.equal(rules.validateSandboxPayout({...data,id:"other"},payout),null);
+  assert.equal(rules.validateSandboxPayout({...data,transactions:[tx,tx]},payout),null);
+  assert.equal(rules.isSandboxBtcAddress("bc1-real-chain-address"),false);
+});
+
+test("creator reservations prevent overspending and duplicate payouts, and verified cancellation releases funds", async () => {
+  const db=new PGlite();
+  try{
+    await db.exec(`CREATE TABLE users(id uuid PRIMARY KEY,role text,status text);
+      CREATE FUNCTION prevent_token_ledger_mutation() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'immutable'; END $$;`);
+    await db.exec(fs.readFileSync("db/migrations/0010_forumpay_sandbox_payouts.sql","utf8"));
+    const creator="11111111-1111-4111-8111-111111111111", id="22222222-2222-4222-8222-222222222222", key="33333333-3333-4333-8333-333333333333", other="44444444-4444-4444-8444-444444444444", address="btc-"+"a".repeat(32);
+    await db.query("INSERT INTO users VALUES($1,'model','active')",[creator]);
+    await db.query("INSERT INTO forumpay_sandbox_creator_earnings(creator_id,amount_pence,reference) VALUES($1,800,'synthetic')",[creator]);
+    const reserve=(pid,pkey,amount)=>db.query("SELECT reserve_forumpay_sandbox_payout($1,$2,$3,$4,$5) AS id",[pid,creator,pkey,amount,address]);
+    assert.equal((await reserve(id,key,800)).rows[0].id,id);
+    assert.equal((await reserve(other,key,800)).rows[0].id,id);
+    await assert.rejects(reserve(other,key,700),/Idempotency conflict/);
+    await assert.rejects(reserve(other,other,100),/Insufficient/);
+    await db.query("UPDATE forumpay_sandbox_payouts SET state='scheduled' WHERE id=$1",[id]);
+    await assert.rejects(reserve(other,other,100),/Insufficient/);
+    await db.query("UPDATE forumpay_sandbox_payouts SET state='cancelled' WHERE id=$1",[id]);
+    assert.equal((await reserve(other,other,800)).rows[0].id,other);
+    await assert.rejects(db.query("UPDATE forumpay_sandbox_creator_earnings SET amount_pence=900"),/immutable/);
+  }finally{await db.close();}
+});
+
+test("production cannot enable payout endpoints even with payout flag set",()=>{
+  const api=load("src/lib/forumpay.ts",{}, {...credentials,VERCEL_ENV:"production",FORUMPAY_SANDBOX_CHECKOUT_ENABLED:"true",FORUMPAY_SANDBOX_PAYOUTS_ENABLED:"true",FORUMPAY_SANDBOX_DATABASE_ISOLATED:"true"});
+  assert.equal(api.forumPaySandboxPayoutsEnabled(),false);
 });

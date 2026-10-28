@@ -133,3 +133,35 @@ export async function findForumPaySandboxTransactions(reference: string) {
   }
   return rows as Record<string, unknown>[];
 }
+
+export function forumPaySandboxPayoutsEnabled() {
+  return forumPaySandboxEnabled() && process.env.FORUMPAY_SANDBOX_DATABASE_ISOLATED === "true" &&
+    process.env.FORUMPAY_SANDBOX_PAYOUTS_ENABLED === "true";
+}
+
+export async function forumPayPayoutRequest(
+  endpoint: "StartPayout" | "GetPayout" | "ConfirmPayout" | "CancelPayout",
+  fields: Record<string, string>,
+): Promise<Record<string, unknown>> {
+  if (!forumPaySandboxPayoutsEnabled()) throw new Error("Sandbox payouts unavailable.");
+  const config = getForumPayConfiguration()!;
+  const url = new URL(endpoint + "/", sandboxApi);
+  url.search = new URLSearchParams(fields).toString();
+  const response = await fetch(url, {
+    headers: { Authorization: "Basic " + Buffer.from(config.username + ":" + config.password).toString("base64"), Accept: "application/json" },
+    cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) {
+    console.error("Sandbox payout API failed", { endpoint, status: response.status });
+    throw new Error("ForumPay sandbox payout request failed.");
+  }
+  const data: unknown = await response.json();
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("Invalid payout response.");
+  const result = data as Record<string, unknown>;
+  if ("err" in result) {
+    const code = typeof result.code === "string" && /^[A-Za-z]{1,40}$/.test(result.code) ? result.code : "unspecified";
+    console.error("Sandbox payout rejected", { endpoint, code });
+    throw new Error("ForumPay rejected the sandbox payout request.");
+  }
+  return result;
+}

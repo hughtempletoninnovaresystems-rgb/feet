@@ -30,6 +30,7 @@ if (process.env.FORUMPAY_SANDBOX_VALIDATE_API !== "true") {
     throw new Error("ForumPay sandbox API key needs can_sell permission for checkout.");
   }
   console.log("ForumPay sandbox API authentication verified: Ping pong and can_sell permission confirmed.");
+  console.log("ForumPay sandbox payout permission", { canWithdraw: account.api.permissions.includes("can_withdraw") });
   const transactionResponse = await fetch("https://sandbox.api.forumpay.com/pay/v2/GetTransactions/?reference_no=49cfba8b-97dd-486f-9502-d2bd94316612&limit=50", { headers, redirect: "error", signal: AbortSignal.timeout(10_000) });
   const transactions = await transactionResponse.json();
   console.log("ForumPay verification diagnostic", {

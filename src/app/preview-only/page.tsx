@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { forumPaySandboxEnabled } from "@/lib/forumpay";
+import { forumPaySandboxPayoutsEnabled, forumPaySandboxEnabled } from "@/lib/forumpay";
 
 export default async function PreviewOnly() {
   if (forumPaySandboxEnabled()) {
     const user = await getSessionUser();
+    if (user?.role === "model" && user.status === "active" && user.email_verified_at && user.age_verified_at && forumPaySandboxPayoutsEnabled()) redirect("/sandbox/payouts");
     if (user?.role === "client" && user.status === "active" && user.email_verified_at && user.age_verified_at) {
       redirect("/sandbox/checkout");
     }

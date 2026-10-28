@@ -55,3 +55,15 @@ The prebuild hook is inert unless its branch-specific flags are enabled. FORUMPA
 After creating a separate Neon branch/database, set a branch-specific Preview DATABASE_URL for codex/forumpay-sandbox-checkout. Only then set FORUMPAY_SANDBOX_DATABASE_ISOLATED=true and FORUMPAY_SANDBOX_MIGRATE=true for that branch. The prebuild hook applies migration 0007 atomically under a PostgreSQL advisory lock, verifies the three tables, and fails closed if prerequisites are absent. It refuses to run outside Preview or the checkout branch. After the successful rollout, turn FORUMPAY_SANDBOX_MIGRATE off.
 
 Do not enable the isolation confirmation flag while Preview and Production share a database. The operator confirmed on 2026-10-28 that the existing Preview DATABASE_URL currently shares Production, so a separate Neon branch is required before migration.
+
+## Creator payout sandbox
+
+Migration 0010 adds isolated creator test earnings, payout reservations and a serialized reservation function. The /sandbox/payouts page requires an active test model account, the Preview environment, a confirmed isolated database and FORUMPAY_SANDBOX_PAYOUTS_ENABLED=true. The API is permanently pinned to the sandbox ForumPay hostname.
+
+The synthetic creator has £8 of test earnings representing the proposed 80% share of an illustrative £10 sale. These are fixtures, not real sale proceeds. Only simulated BTC addresses in the btc-<32 hex> format are accepted, and amounts are reserved before calling StartPayout. Duplicate request keys cannot create another payout or change its destination. Ambiguous failures keep the reservation held.
+
+StartPayout prepares a GBP-denominated payout using fixed_in fees. The user reviews the BTC amount and recipient before a separate ConfirmPayout action. GetPayout must match provider ID, creator/payer ID, reference, amount, currency, destination and fee type. Only confirmed in blockchain with a transaction ID marks it paid. Cancellation releases the reservation only after GetPayout verifies both payout and transaction cancellation. Scheduled and sent are not treated as completed withdrawals.
+
+The smoke script is inert unless FORUMPAY_SANDBOX_PAYOUT_SMOKE=true is explicitly enabled for the isolated Preview checkout branch. It uses only the synthetic creator and the operator's previously supplied simulated wallet address; it prepares then cancels a test payout without confirming a transfer. Disable the flag after use. Provider payout capability and available sandbox crypto balance may need enabling/funding in ForumPay; those are separate from checkout permissions and the simulator wallet balance.
+
+Production wallets, creator onboarding and live payouts remain disabled.
