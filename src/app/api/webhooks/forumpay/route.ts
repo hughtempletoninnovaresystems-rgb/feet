@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     const parsed = notification.safeParse(await readJson(request, 4096));
     if (!parsed.success) return jsonError("Invalid notification.", 400);
     const event = parsed.data;
-    if (event.pos_id !== getForumPayConfiguration()?.posId) return jsonError("Unknown point of service.", 400);
+    if (event.pos_id !== "widget" && event.pos_id !== getForumPayConfiguration()?.posId) return jsonError("Unknown point of service.", 400);
     const id = createHash("sha256").update(JSON.stringify([event.reference_no, event.payment_id, event.currency, event.address])).digest("hex");
     // Durably enqueue only. The authenticated CheckPayment API establishes trust,
     // never this unsigned payload. No wallet mutation happens in this handler.

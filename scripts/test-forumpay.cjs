@@ -57,6 +57,7 @@ test("provider calls use Basic auth, secure fixed-price links and stored identif
   assert.equal(new URLSearchParams(first.options.body).get("webhook_url"), "https://checkout.example.com/api/webhooks/forumpay");
   await api.checkForumPaySandboxPayment({ paymentId: "stored-id", currency: "BTC", address: "stored-address" });
   assert.equal(calls[1].url.searchParams.get("payment_id"), "stored-id");
+  assert.equal(calls[1].url.searchParams.get("pos_id"), "widget");
   assert.equal(calls[1].options.redirect, "error");
   assert.equal(api.forumPayIntegrationReady(), false);
   assert.equal(api.forumPaySandboxEnabled(), false);
@@ -178,7 +179,7 @@ test("transaction discovery uses the authenticated API with the stored order ref
   const rows = await api.findForumPaySandboxTransactions("stored-reference");
   assert.equal(requested.pathname, "/pay/v2/GetTransactions/");
   assert.equal(requested.searchParams.get("reference_no"), "stored-reference");
-  assert.equal(requested.searchParams.get("pos_id"), "WEB1");
+  assert.equal(requested.searchParams.get("pos_id"), null);
   assert.equal(rows[0].payment_id, "p");
 });
 

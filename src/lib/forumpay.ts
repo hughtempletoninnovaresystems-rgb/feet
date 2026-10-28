@@ -14,7 +14,7 @@ export function getForumPayConfiguration() {
 async function requestForumPay(endpoint: "StartPayment" | "CheckPayment" | "CreatePaymentLink" | "Ping" | "GetTransactions", method: "GET" | "POST", fields: Record<string, string>): Promise<Record<string, unknown> | Record<string, unknown>[]> {
   const config = getForumPayConfiguration();
   if (!config) throw new Error("ForumPay sandbox credentials are not configured.");
-  const params = new URLSearchParams({ ...fields, pos_id: config.posId });
+  const params = new URLSearchParams({ ...(endpoint === "GetTransactions" ? {} : { pos_id: config.posId }), ...fields });
   const url = new URL(endpoint + "/", sandboxApi);
   if (method === "GET") url.search = params.toString();
   const response = await fetch(url, {
@@ -73,6 +73,7 @@ export async function startForumPaySandboxPayment(order: ForumPayOrder) {
 export async function checkForumPaySandboxPayment(payment: { paymentId: string; currency: string; address: string }) {
   if (!payment.paymentId || !payment.currency || !payment.address) throw new Error("Missing ForumPay payment identifiers.");
   const result = await requestForumPay("CheckPayment", "GET", {
+    pos_id: "widget",
     payment_id: payment.paymentId,
     currency: payment.currency,
     address: payment.address,

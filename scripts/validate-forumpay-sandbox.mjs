@@ -11,8 +11,8 @@ if (process.env.FORUMPAY_SANDBOX_VALIDATE_API !== "true") {
     throw new Error("Configure valid ForumPay sandbox API credentials and point of service.");
   }
   const headers = { Authorization: "Basic " + Buffer.from(username + ":" + password).toString("base64"), Accept: "application/json" };
-  async function call(endpoint) {
-    const response = await fetch("https://sandbox.api.forumpay.com/pay/v2/" + endpoint + "/", {
+  async function call(endpoint, query = "") {
+    const response = await fetch("https://sandbox.api.forumpay.com/pay/v2/" + endpoint + "/" + query, {
       headers, redirect: "error", signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) throw new Error("ForumPay sandbox " + endpoint + " failed with HTTP " + response.status + ".");
@@ -30,4 +30,13 @@ if (process.env.FORUMPAY_SANDBOX_VALIDATE_API !== "true") {
     throw new Error("ForumPay sandbox API key needs can_sell permission for checkout.");
   }
   console.log("ForumPay sandbox API authentication verified: Ping pong and can_sell permission confirmed.");
+  const transactionResponse = await fetch("https://sandbox.api.forumpay.com/pay/v2/GetTransactions/?reference_no=49cfba8b-97dd-486f-9502-d2bd94316612&limit=50", { headers, redirect: "error", signal: AbortSignal.timeout(10_000) });
+  const transactions = await transactionResponse.json();
+  console.log("ForumPay verification diagnostic", {
+    status: transactionResponse.status, array: Array.isArray(transactions),
+    fields: Object.keys(transactions ?? {}),
+    code: typeof transactions.code === "string" ? transactions.code : null,
+    rowFields: Array.isArray(transactions) && transactions.length ? Object.keys(transactions[0]) : null,
+    posIds: Array.isArray(transactions) ? transactions.map(row => row.pos_id) : null,
+  });
 }
