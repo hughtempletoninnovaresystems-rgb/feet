@@ -32,3 +32,29 @@ if (process.env.FORUMPAY_SANDBOX_START_RETRY_TEST === "true") {
   console.log("Sandbox automatic-retry fixture started", {orderId:id,paymentId:data.payment_id});
   console.log("No funds sent. First notification will receive 503; subsequent notifications receive 200.");
 }
+
+// Cancelling an unpaid, armed sandbox fixture creates a genuine provider event
+// without requiring a simulated transfer or touching an existing paid order.
+if (process.env.FORUMPAY_SANDBOX_CANCEL_RETRY_TEST_ORDER) {
+  if (process.env.VERCEL_ENV !== "preview" || process.env.VERCEL_GIT_COMMIT_REF !== "codex/forumpay-sandbox-checkout" ||
+      process.env.FORUMPAY_SANDBOX_DATABASE_ISOLATED !== "true") throw new Error("Retry cancellation requires isolated Preview.");
+  const sql = neon(process.env.DATABASE_URL);
+  const id = process.env.FORUMPAY_SANDBOX_CANCEL_RETRY_TEST_ORDER;
+  const order = (await sql`SELECT o.payment_id,o.currency,o.address FROM forumpay_sandbox_orders o
+    JOIN forumpay_sandbox_retry_tests t ON t.order_id=o.id
+    WHERE o.id=${id} AND t.expires_at>now() AND o.state='pending'
+      AND NOT EXISTS (SELECT 1 FROM forumpay_sandbox_credits c WHERE c.order_id=o.id)`)[0];
+  if (!order) throw new Error("Unpaid armed retry fixture not found.");
+  const params = new URLSearchParams({pos_id:"widget",payment_id:order.payment_id,currency:order.currency,address:order.address});
+  const headers = {Authorization:"Basic "+Buffer.from(process.env.FORUMPAY_API_USERNAME.trim()+":"+process.env.FORUMPAY_API_PASSWORD).toString("base64")};
+  const check = await fetch("https://sandbox.api.forumpay.com/pay/v2/CheckPayment/?"+params,{headers,redirect:"error",signal:AbortSignal.timeout(10_000)});
+  const before=await check.json();
+  if (!check.ok || before.err || before.reference_no!==id || before.confirmed===true ||
+      !/^0*(?:\.0*)?$/.test(String(before.payment ?? ""))) throw new Error("Retry fixture is not verifiably unpaid; cancellation refused.");
+  if (before.cancelled !== true) {
+    const response=await fetch("https://sandbox.api.forumpay.com/pay/v2/CancelPayment/?"+params,{headers,redirect:"error",signal:AbortSignal.timeout(10_000)});
+    const data=await response.json();
+    if (!response.ok || data.err || data.cancelled!==true) throw new Error("Sandbox cancellation was not confirmed.");
+  }
+  console.log("Unpaid sandbox retry fixture cancelled through ForumPay; waiting for automatic notification delivery.", {orderId:id});
+}
