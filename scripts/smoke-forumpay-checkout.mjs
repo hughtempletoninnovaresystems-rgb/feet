@@ -28,8 +28,12 @@ if (process.env.FORUMPAY_SANDBOX_SMOKE_CHECKOUT === "true") {
   });
   const data = await response.json();
   const safe = v => typeof v === "string" && /^[A-Za-z0-9_. -]{1,100}$/.test(v) ? v : "unspecified";
+  const safeMessage = typeof data.err === "string" ? data.err
+    .split(process.env.FORUMPAY_API_PASSWORD).join("[redacted]")
+    .split(process.env.FORUMPAY_API_USERNAME.trim()).join("[redacted]")
+    .replace(/https?:\/\/\S+/g, "[url omitted]").slice(0, 250) : "unspecified";
   if (!response.ok || data.err) {
-    console.error("ForumPay checkout diagnostic", { status: response.status, code: safe(data.code), field: safe(data.additional?.field), reason: safe(data.additional?.reason) });
+    console.error("ForumPay checkout diagnostic", { status: response.status, code: safe(data.code), field: safe(data.additional?.field), reason: safe(data.additional?.reason), message: safeMessage });
     throw new Error("ForumPay sandbox checkout rejected. No test tokens credited.");
   }
   // Print structure and host only; never a provider access token or full URL.
