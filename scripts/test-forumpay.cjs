@@ -8,7 +8,7 @@ const { PGlite } = require("@electric-sql/pglite");
 function load(file, mocks = {}, env = {}) {
   const compiled = { exports: {} };
   const source = ts.transpileModule(fs.readFileSync(file, "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
   vm.runInNewContext(source, {
     module: compiled, exports: compiled.exports,
@@ -192,4 +192,22 @@ test("migration and API validation refuse production even if setup flags are ena
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /Preview/);
   }
+});
+
+test("eligible sandbox buyers reach test checkout while production stays gated", async () => {
+  let enabled = true;
+  let user = { role: "client", status: "active", email_verified_at: "date", age_verified_at: "date" };
+  const page = load("src/app/preview-only/page.tsx", {
+    "next/link": { default: () => null },
+    "next/navigation": { redirect: path => { throw new Error("redirect:" + path); } },
+    "@/lib/auth": { getSessionUser: async () => user },
+    "@/lib/forumpay": { forumPaySandboxEnabled: () => enabled },
+  });
+  await assert.rejects(page.default(), /redirect:\/sandbox\/checkout/);
+  // Disabled production and ineligible visitors keep the marketplace gate.
+  enabled = false;
+  assert.ok(await page.default());
+  enabled = true;
+  user = { ...user, role: "model" };
+  assert.ok(await page.default());
 });
