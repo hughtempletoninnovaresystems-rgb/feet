@@ -34,9 +34,23 @@ if (process.env.FORUMPAY_SANDBOX_PAYOUT_SMOKE === "true") {
   console.log("Sandbox payout response structure",{fields:Object.keys(data),transactionFields:Array.isArray(data.transactions)&&data.transactions[0]?Object.keys(data.transactions[0]):[]});
   if (!validation.validateSandboxPayout(data,payout))throw new Error("Provider payout details failed validation; no confirmation sent.");
   console.log("Sandbox payout prepared and details matched",{payoutId:id,status:data.status});
-  await api.forumPayPayoutRequest("CancelPayout",{id:started.id});
-  await service.reconcileSandboxPayout(payout);
-  const verified=(await sql`SELECT state FROM forumpay_sandbox_payouts WHERE id=${id}`)[0];
-  if (verified.state!=="cancelled")throw new Error("Sandbox cancellation not verified.");
-  console.log("Sandbox payout prepare/cancel test passed. Synthetic earnings released; no transfer confirmed.");
+  if (process.env.FORUMPAY_SANDBOX_PAYOUT_SMOKE_MODE === "confirm") {
+    await sql`UPDATE forumpay_sandbox_payouts SET state='confirming' WHERE id=${id}`;
+    const confirmed=await api.forumPayPayoutRequest("ConfirmPayout",{id:started.id});
+    if (confirmed.confirmed!==true)throw new Error("Provider did not confirm sandbox payout scheduling.");
+    console.log("Sandbox creator payout confirmation accepted",{payoutId:id});
+    for(let attempt=0;attempt<7;attempt++){
+      await service.reconcileSandboxPayout({...payout,state:"confirming"});
+      const result=(await sql`SELECT state,txid FROM forumpay_sandbox_payouts WHERE id=${id}`)[0];
+      console.log("Sandbox creator payout status",{payoutId:id,state:result.state,hasTransactionId:Boolean(result.txid)});
+      if(result.state==="paid")break;
+      if(attempt<6)await new Promise(resolve=>setTimeout(resolve,15_000));
+    }
+  } else {
+    await api.forumPayPayoutRequest("CancelPayout",{id:started.id});
+    await service.reconcileSandboxPayout(payout);
+    const verified=(await sql`SELECT state FROM forumpay_sandbox_payouts WHERE id=${id}`)[0];
+    if (verified.state!=="cancelled")throw new Error("Sandbox cancellation not verified.");
+    console.log("Sandbox payout prepare/cancel test passed. Synthetic earnings released; no transfer confirmed.");
+  }
 }
