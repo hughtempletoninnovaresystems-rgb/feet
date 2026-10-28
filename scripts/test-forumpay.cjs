@@ -78,6 +78,7 @@ test("database reconciliation credits exactly once and rejects forged or mismatc
       BEGIN RAISE EXCEPTION 'immutable'; END $$;`);
     await db.exec(fs.readFileSync("db/migrations/0007_forumpay_sandbox_checkout.sql", "utf8"));
     await db.exec(fs.readFileSync("db/migrations/0008_forumpay_webhook_delivery.sql", "utf8"));
+    await db.exec(fs.readFileSync("db/migrations/0009_forumpay_retry_test.sql", "utf8"));
     // Migration can safely be run twice.
     await db.exec(fs.readFileSync("db/migrations/0007_forumpay_sandbox_checkout.sql", "utf8"));
     const user = "11111111-1111-4111-8111-111111111111";
@@ -121,7 +122,7 @@ test("database reconciliation credits exactly once and rejects forged or mismatc
       "next/server": { after: () => {} },
       "@/lib/forumpay-checkout": { reconcileSandboxOrder: async () => {} },
       "@/lib/api": { jsonError: (error, status) => Response.json({ error }, { status }), readJson: r => r.json() },
-      "@/lib/db": { getDb: () => sql },
+      "@/lib/db": { getDb: () => sql, queryRows: r => r },
       "@/lib/forumpay": { forumPaySandboxEnabled: () => true, getForumPayConfiguration: () => ({ posId: "WEB1" }) },
     });
     const deliver = () => webhook.POST(new Request("https://checkout.example.com/api/webhooks/forumpay", {
@@ -136,6 +137,17 @@ test("database reconciliation credits exactly once and rejects forged or mismatc
     const receipt = (await db.query("SELECT delivery_count, processed_at FROM forumpay_sandbox_notifications WHERE delivery_count=3")).rows[0];
     assert.ok(receipt.processed_at);
     assert.equal((await db.query("SELECT count(*)::int AS count FROM forumpay_sandbox_credits")).rows[0].count, 1);
+    await db.query("INSERT INTO forumpay_sandbox_retry_tests(order_id) VALUES ($1)", [order]);
+    const retryDelivery = () => webhook.POST(new Request("https://checkout.example.com/api/webhooks/forumpay/retry-test", {
+      method: "POST", body: JSON.stringify({ reference_no: order, payment_id: "payment-1", currency: "BTC", address: "address", pos_id: "widget" }),
+    }));
+    assert.equal((await retryDelivery()).status, 503);
+    assert.equal((await retryDelivery()).status, 200);
+    const attempts = (await db.query("SELECT response_status,event_id FROM forumpay_sandbox_retry_attempts ORDER BY received_at")).rows;
+    assert.deepEqual(attempts.map(a => a.response_status), [503,200]);
+    assert.equal(attempts[0].event_id, attempts[1].event_id);
+    assert.equal((await db.query("SELECT count(*)::int AS count FROM forumpay_sandbox_credits")).rows[0].count, 1);
+
   } finally { await db.close(); }
 });
 

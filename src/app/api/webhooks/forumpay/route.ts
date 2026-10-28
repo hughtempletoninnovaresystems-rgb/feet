@@ -3,7 +3,7 @@ import { reconcileSandboxOrder } from "@/lib/forumpay-checkout";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { jsonError, readJson } from "@/lib/api";
-import { getDb } from "@/lib/db";
+import { getDb, queryRows } from "@/lib/db";
 import { forumPaySandboxEnabled, getForumPayConfiguration } from "@/lib/forumpay";
 
 export const runtime = "nodejs";
@@ -23,12 +23,29 @@ export async function POST(request: Request) {
     // Durably enqueue only. The authenticated CheckPayment API establishes trust,
     // never this unsigned payload. No wallet mutation happens in this handler.
     const sql = getDb();
+    const retryTest = new URL(request.url).pathname.endsWith("/forumpay/retry-test");
+    if (retryTest) {
+      const failed = queryRows<{ order_id: string }>(await sql`
+        WITH fail AS (
+          UPDATE forumpay_sandbox_retry_tests SET failures_remaining = failures_remaining - 1
+          WHERE order_id = ${event.reference_no} AND failures_remaining > 0 AND expires_at > now()
+          RETURNING order_id
+        )
+        INSERT INTO forumpay_sandbox_retry_attempts(order_id, event_id, response_status)
+        SELECT order_id, ${id}, 503 FROM fail RETURNING order_id`);
+      if (failed.length) return jsonError("Controlled sandbox delivery failure. Retry this notification.", 503);
+    }
     await sql`INSERT INTO forumpay_sandbox_notifications(id, order_id, payment_id, currency, address, delivery_count, last_delivery_at)
       SELECT ${id}, id, ${event.payment_id}, ${event.currency}, ${event.address}, 1, now()
       FROM forumpay_sandbox_orders WHERE id = ${event.reference_no}
       ON CONFLICT (id) DO UPDATE SET
         delivery_count = forumpay_sandbox_notifications.delivery_count + 1,
         last_delivery_at = now()`;
+    if (retryTest) {
+      await sql`INSERT INTO forumpay_sandbox_retry_attempts(order_id, event_id, response_status)
+        SELECT order_id, ${id}, 200 FROM forumpay_sandbox_retry_tests
+        WHERE order_id = ${event.reference_no} AND expires_at > now()`;
+    }
     after(async () => {
       try { await reconcileSandboxOrder(event.reference_no); }
       catch { /* Durable inbox remains available to polling/reconciliation. */ }

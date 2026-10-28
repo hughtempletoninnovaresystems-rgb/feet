@@ -11,6 +11,12 @@ if (process.env.FORUMPAY_SANDBOX_SMOKE_CHECKOUT === "true") {
   await sql`INSERT INTO forumpay_sandbox_orders(id,user_id,request_key,package_id,amount_pence,tokens)
     VALUES (${id},${users[0].id},${id},'test-100',1000,100)`;
   const origin = new URL(process.env.APP_URL);
+  const retryTest = process.env.FORUMPAY_SANDBOX_ARM_RETRY_TEST === "true";
+  if (retryTest) {
+    await sql`INSERT INTO forumpay_sandbox_retry_tests(order_id) VALUES (${id})`;
+  }
+  const webhook = new URL(retryTest ? "/api/webhooks/forumpay/retry-test" : "/api/webhooks/forumpay", origin);
+  if (process.env.FORUMPAY_WEBHOOK_BYPASS_SECRET) webhook.searchParams.set("x-vercel-protection-bypass", process.env.FORUMPAY_WEBHOOK_BYPASS_SECRET);
   const fields = new URLSearchParams({
     pos_id: process.env.FORUMPAY_POS_ID,
     invoice_amount: "10.00", invoice_currency: "GBP", reference_no: id, payer_id: users[0].id,
@@ -18,7 +24,7 @@ if (process.env.FORUMPAY_SANDBOX_SMOKE_CHECKOUT === "true") {
     accept_zero_confirmations: "false", auto_accept_underpayment: "false",
     auto_accept_overpayment: "false", auto_accept_late_payment: "false",
     auto_accept_other_currency: "false",
-    webhook_url: new URL("/api/webhooks/forumpay",origin).href,
+    webhook_url: webhook.href,
     redirect_url_on_success: new URL("/sandbox/checkout",origin).href,
     redirect_url_on_failure: new URL("/sandbox/checkout",origin).href,
   });
