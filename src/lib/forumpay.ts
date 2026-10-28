@@ -95,7 +95,8 @@ export function forumPaySandboxEnabled() {
     Boolean(getForumPayConfiguration());
 }
 
-export async function createForumPaySandboxLink(order: { id: string; amountPence: number }) {
+export async function createForumPaySandboxLink(order: { id: string; amountPence: number; payerId: string }) {
+  if (!/^[A-Za-z0-9._-]{1,64}$/.test(order.payerId)) throw new Error("Invalid sandbox payer.");
   const origin = new URL(process.env.APP_URL ?? "");
   if (origin.protocol !== "https:" || origin.username || origin.password) throw new Error("Configure a secure sandbox APP_URL.");
   const result = await requestForumPay("CreatePaymentLink", "POST", {
@@ -106,6 +107,7 @@ export async function createForumPaySandboxLink(order: { id: string; amountPence
     invoice_currency: "GBP",
     widget_type: "0",
     reference_no: order.id,
+    payer_id: order.payerId,
     secure_link: "true",
     allow_multiple_payments: "false",
     accept_zero_confirmations: "false",

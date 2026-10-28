@@ -34,7 +34,7 @@ export async function POST(request: Request) {
       return Response.json({ orderId: existing.id, checkoutUrl: existing.checkout_url }, { headers: { "Cache-Control": "no-store" } });
     }
     // No automatic retry after an ambiguous provider timeout.
-    const result = await createForumPaySandboxLink({ id, amountPence: pack.pence });
+    const result = await createForumPaySandboxLink({ id, amountPence: pack.pence, payerId: auth.user.id });
     const checkoutUrl = sandboxPaymentUrl(result.url);
     await sql`UPDATE forumpay_sandbox_orders SET checkout_url = ${checkoutUrl}, state = 'pending', updated_at = now() WHERE id = ${id}`;
     return Response.json({ orderId: id, checkoutUrl }, { status: 201, headers: { "Cache-Control": "no-store" } });

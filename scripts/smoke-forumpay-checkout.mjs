@@ -13,7 +13,7 @@ if (process.env.FORUMPAY_SANDBOX_SMOKE_CHECKOUT === "true") {
   const origin = new URL(process.env.APP_URL);
   const fields = new URLSearchParams({
     pos_id: process.env.FORUMPAY_POS_ID,
-    invoice_amount: "10.00", invoice_currency: "GBP", reference_no: id,
+    invoice_amount: "10.00", invoice_currency: "GBP", reference_no: id, payer_id: users[0].id,
     widget_type: "0", secure_link: "true", allow_multiple_payments: "false",
     accept_zero_confirmations: "false", auto_accept_underpayment: "false",
     auto_accept_overpayment: "false", auto_accept_late_payment: "false",

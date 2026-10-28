@@ -44,13 +44,14 @@ test("provider calls use Basic auth, secure fixed-price links and stored identif
     calls.push({ url, options });
     return Response.json({ url: "https://sandbox.widget.forumpay.com/pay/order" });
   } }, credentials);
-  await api.createForumPaySandboxLink({ id: "order", amountPence: 1000 });
+  await api.createForumPaySandboxLink({ id: "order", amountPence: 1000, payerId: "test-user" });
   const first = calls[0];
   assert.equal(first.url.href, "https://sandbox.api.forumpay.com/pay/v2/CreatePaymentLink/");
   assert.equal(first.options.method, "POST");
   assert.equal(first.options.headers.Authorization, "Basic " + Buffer.from("test:password").toString("base64"));
   assert.equal(new URLSearchParams(first.options.body).get("invoice_amount"), "10.00");
   assert.equal(new URLSearchParams(first.options.body).get("secure_link"), "true");
+  assert.equal(new URLSearchParams(first.options.body).get("payer_id"), "test-user");
   assert.equal(new URLSearchParams(first.options.body).get("allow_multiple_payments"), "false");
   assert.equal(new URLSearchParams(first.options.body).get("auto_accept_underpayment"), "false");
   assert.equal(new URLSearchParams(first.options.body).get("webhook_url"), "https://checkout.example.com/api/webhooks/forumpay");
