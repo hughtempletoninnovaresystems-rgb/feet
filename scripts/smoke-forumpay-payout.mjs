@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
 import ts from "typescript";
 
-if (process.env.FORUMPAY_SANDBOX_PAYOUT_SMOKE === "true") {
+if (process.env.FORUMPAY_SANDBOX_PAYOUT_SMOKE === "true" || process.env.FORUMPAY_SANDBOX_PAYOUT_RECONCILE_ID) {
   if (process.env.VERCEL_ENV!=="preview" || process.env.VERCEL_GIT_COMMIT_REF!=="codex/forumpay-sandbox-checkout" ||
       process.env.FORUMPAY_SANDBOX_DATABASE_ISOLATED!=="true") throw new Error("Payout smoke test requires isolated Preview.");
   const require=createRequire(import.meta.url);
@@ -23,6 +23,17 @@ if (process.env.FORUMPAY_SANDBOX_PAYOUT_SMOKE === "true") {
     "@/lib/forumpay":api,"@/lib/forumpay-payout-validation":validation});
   const creator=(await sql`SELECT id FROM users WHERE email='sandbox-creator@example.test' AND display_name='Sandbox Test Creator (synthetic)'`)[0];
   if (!creator)throw new Error("Synthetic creator missing.");
+  if (process.env.FORUMPAY_SANDBOX_PAYOUT_RECONCILE_ID) {
+    const payout=(await sql`SELECT * FROM forumpay_sandbox_payouts WHERE id=${process.env.FORUMPAY_SANDBOX_PAYOUT_RECONCILE_ID} AND creator_id=${creator.id}`)[0];
+    if (!payout?.provider_id)throw new Error("Known synthetic payout missing.");
+    const data=await api.forumPayPayoutRequest("GetPayout",{id:payout.provider_id});
+    console.log("Existing sandbox payout provider state",{status:data.status,transactionStatuses:data.transactions?.map(t=>t.status)});
+    await service.reconcileSandboxPayout(payout);
+    if (process.env.FORUMPAY_SANDBOX_PAYOUT_RETRY_CONFIRM === "true" && data.status==="pending confirmation") {
+      await api.forumPayPayoutRequest("ConfirmPayout",{id:payout.provider_id});
+      await service.reconcileSandboxPayout(payout);
+    }
+  } else {
   const id=randomUUID(), address="btc-5592b1fdb13442a9984d98d42e7007ec";
   await sql`SELECT reserve_forumpay_sandbox_payout(${id}::uuid,${creator.id}::uuid,${id}::uuid,800,${address})`;
   const started=await api.forumPayPayoutRequest("StartPayout",{currency:"BTC",address,payer_id:creator.id,
@@ -53,4 +64,5 @@ if (process.env.FORUMPAY_SANDBOX_PAYOUT_SMOKE === "true") {
     if (verified.state!=="cancelled")throw new Error("Sandbox cancellation not verified.");
     console.log("Sandbox payout prepare/cancel test passed. Synthetic earnings released; no transfer confirmed.");
   }
+}
 }

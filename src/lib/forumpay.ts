@@ -160,7 +160,11 @@ export async function forumPayPayoutRequest(
   const result = data as Record<string, unknown>;
   if ("err" in result) {
     const code = typeof result.code === "string" && /^[A-Za-z]{1,40}$/.test(result.code) ? result.code : "unspecified";
-    console.error("Sandbox payout rejected", { endpoint, code });
+    const additional = result.additional as Record<string, unknown> | undefined;
+    const reason = typeof additional?.reason === "string" ? additional.reason.slice(0,100) : "unspecified";
+    const message = typeof result.err === "string" ? result.err.split(config.password).join("[redacted]")
+      .split(config.username).join("[redacted]").replace(/https?:\/\/\S+/g,"[url omitted]").slice(0,200) : "unspecified";
+    console.error("Sandbox payout rejected", { endpoint, code, reason, message });
     throw new Error("ForumPay rejected the sandbox payout request.");
   }
   return result;
