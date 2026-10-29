@@ -139,6 +139,8 @@ export function forumPaySandboxPayoutsEnabled() {
     process.env.FORUMPAY_SANDBOX_PAYOUTS_ENABLED === "true";
 }
 
+export class ForumPayPayoutRejected extends Error {}
+
 export async function forumPayPayoutRequest(
   endpoint: "StartPayout" | "GetPayout" | "ConfirmPayout" | "CancelPayout",
   fields: Record<string, string>,
@@ -165,7 +167,7 @@ export async function forumPayPayoutRequest(
     const message = typeof result.err === "string" ? result.err.split(config.password).join("[redacted]")
       .split(config.username).join("[redacted]").replace(/https?:\/\/\S+/g,"[url omitted]").slice(0,200) : "unspecified";
     console.error("Sandbox payout rejected", { endpoint, code, reason, message });
-    throw new Error("ForumPay rejected the sandbox payout request.");
+    throw new ForumPayPayoutRejected("ForumPay rejected the sandbox payout request.");
   }
   return result;
 }

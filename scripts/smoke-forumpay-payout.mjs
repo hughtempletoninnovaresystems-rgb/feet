@@ -28,7 +28,19 @@ if (process.env.FORUMPAY_SANDBOX_PAYOUT_SMOKE === "true" || process.env.FORUMPAY
     if (!payout?.provider_id)throw new Error("Known synthetic payout missing.");
     const data=await api.forumPayPayoutRequest("GetPayout",{id:payout.provider_id});
     console.log("Existing sandbox payout provider state",{status:data.status,transactionStatuses:data.transactions?.map(t=>t.status)});
-    await service.reconcileSandboxPayout(payout);
+    await service.reconcileSandboxPayout({...payout,state:"pending_confirmation"});
+    const config=api.getForumPayConfiguration();
+    const balanceResponse=await fetch("https://sandbox.api.forumpay.com/pay/v2/GetBalance/", {
+      headers:{Authorization:"Basic "+Buffer.from(config.username+":"+config.password).toString("base64")},
+      redirect:"error",signal:AbortSignal.timeout(10_000),
+    });
+    const balances=await balanceResponse.json();
+    const rows=Array.isArray(balances)?balances:balances.wallets??balances.balances;
+    console.log("Sandbox merchant balance structure",{fields:Object.keys(balances),isArray:Array.isArray(rows)});
+    if(Array.isArray(rows))for(const row of rows.filter(r=>r.currency==="BTC"))console.log("Sandbox merchant BTC funding",{
+      address:validation.isSandboxBtcAddress(row.address??"")?row.address:"not a simulated BTC address",
+      balance:row.balance,
+    });
     if (process.env.FORUMPAY_SANDBOX_PAYOUT_RETRY_CONFIRM === "true" && data.status==="pending confirmation") {
       await api.forumPayPayoutRequest("ConfirmPayout",{id:payout.provider_id});
       await service.reconcileSandboxPayout(payout);

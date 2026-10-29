@@ -2,7 +2,7 @@ import { z } from "zod";
 import { assertSameOrigin } from "@/lib/auth";
 import { jsonError, readJson } from "@/lib/api";
 import { getDb, queryRows } from "@/lib/db";
-import { forumPayPayoutRequest } from "@/lib/forumpay";
+import { ForumPayPayoutRejected, forumPayPayoutRequest } from "@/lib/forumpay";
 import { sandboxCreator, reconcileSandboxPayout } from "@/lib/forumpay-payouts";
 import { validateSandboxPayout, type SandboxPayout } from "@/lib/forumpay-payout-validation";
 
@@ -29,7 +29,16 @@ export async function POST(request:Request,context:{params:Promise<{payoutId:str
       WHERE id=${payoutId} AND creator_id=${auth.user.id} AND state='pending_confirmation' RETURNING id`);
     if (!claimed.length) return jsonError("This payout action is already processing.",409);
     // Keep reservation on timeout; GetPayout determines the eventual outcome.
-    await forumPayPayoutRequest(action.data.action==="confirm"?"ConfirmPayout":"CancelPayout",{id:payout.provider_id});
+    try {
+      await forumPayPayoutRequest(action.data.action==="confirm"?"ConfirmPayout":"CancelPayout",{id:payout.provider_id});
+    } catch (error) {
+      if (error instanceof ForumPayPayoutRejected) {
+        // An explicit rejection can be reconciled immediately. A timeout keeps
+        // the action lock because the provider outcome may still be unknown.
+        await reconcileSandboxPayout({...payout,state:"pending_confirmation"});
+      }
+      throw error;
+    }
     await reconcileSandboxPayout({...payout,state});
     return Response.json({ok:true},{headers:{"Cache-Control":"no-store"}});
   } catch(error) {
