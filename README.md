@@ -1,5 +1,7 @@
 # My Feet Show
 
+For the current Preview implementation, verified sandbox results and next steps, read [Project handover](docs/PROJECT_HANDOVER.md).
+
 My Feet Show is a pre-production, UK-focused creator marketplace. It has server-side email/password, Google, and Facebook authentication and a Didit age-verification flow, database-backed creator discovery and profile interactions, persistent profile settings, private S3 creator uploads held for review, an authenticated moderation queue, and server-relayed Twilio Conversations messages. It is not production-ready: purchases, payouts, paid media access, and video calls are disabled; malware/content scanning, appeals, evidence retention, and launch sign-offs remain incomplete. Stripe is not approved for this adult-services product.
 
 ## Current release gates
