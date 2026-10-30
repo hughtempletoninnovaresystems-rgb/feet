@@ -19,10 +19,11 @@ export default function CreatorMedia() {
     const response = await fetch("/api/model/media", { cache: "no-store" });
     const data = await response.json() as { media?: Media[]; error?: string };
     if (!response.ok) throw new Error(data.error ?? "Creator media is unavailable.");
-    setMedia(data.media ?? []);
+    return data.media ?? [];
   }, []);
 
-  useEffect(() => { void load().catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Creator media is unavailable.")); }, [load]);
+  const handleLoadError = useCallback((reason: unknown) => setError(reason instanceof Error ? reason.message : "Creator media is unavailable."), []);
+  useEffect(() => { void load().then(setMedia).catch(handleLoadError); }, [handleLoadError, load]);
 
   const createUpload = async (mediaId: string, file: File) => {
     const presignResponse = await fetch(`/api/model/media/${mediaId}/assets`, {
@@ -53,7 +54,7 @@ export default function CreatorMedia() {
       for (const file of files) await createUpload(data.mediaId, file);
       setTitle(""); setDescription(""); setFiles([]);
       setNotice("Files uploaded to private storage. They will stay hidden until moderation approves them.");
-      await load();
+      setMedia(await load());
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Upload could not be completed.");
     } finally { setBusy(false); }
@@ -66,7 +67,7 @@ export default function CreatorMedia() {
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error ?? "Media could not be published.");
       setNotice("Your approved media is published.");
-      await load();
+      setMedia(await load());
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Media could not be published."); }
     finally { setBusy(false); }
   };

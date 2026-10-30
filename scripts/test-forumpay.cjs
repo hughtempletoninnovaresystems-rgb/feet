@@ -1,0 +1,367 @@
+const { test } = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const vm = require("node:vm");
+const ts = require("typescript");
+const { PGlite } = require("@electric-sql/pglite");
+
+function load(file, mocks = {}, env = {}) {
+  const compiled = { exports: {} };
+  const source = ts.transpileModule(fs.readFileSync(file, "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText;
+  vm.runInNewContext(source, {
+    module: compiled, exports: compiled.exports,
+    require: name => name === "server-only" ? {} : name in mocks ? mocks[name] : require(name),
+    process: { env }, Error, SyntaxError, Buffer, URL, URLSearchParams, AbortSignal, Response, console,
+    fetch: mocks.fetch ?? (() => { throw new Error("Unexpected network call"); }),
+  }, { filename: file });
+  return compiled.exports;
+}
+const validation = load("src/lib/forumpay-validation.ts");
+const credentials = { PAYMENT_PROVIDER: "forumpay", FORUMPAY_API_USERNAME: "test", FORUMPAY_API_PASSWORD: "password", FORUMPAY_POS_ID: "WEB1", APP_URL: "https://checkout.example.com" };
+
+test("same-origin validation accepts only the configured site and exact Preview deployment URL", () => {
+  const auth = load("src/lib/auth.ts", {
+    "next/headers": {},
+    "next/navigation": {},
+    "@/lib/db": {},
+    "@/lib/release-gates": {},
+  }, {
+    NODE_ENV: "production",
+    VERCEL_ENV: "preview",
+    APP_URL: "https://feet-git-branch-example.vercel.app",
+    VERCEL_URL: "feet-a1b2c3-hugh-team.vercel.app",
+  });
+  const verify = origin => auth.assertSameOrigin(new Request("https://app.example/api", { headers: { origin } }));
+  assert.doesNotThrow(() => verify("https://feet-git-branch-example.vercel.app"));
+  assert.doesNotThrow(() => verify("https://feet-a1b2c3-hugh-team.vercel.app"));
+  for (const origin of [
+    "https://feet-a1b2c3-hugh-team.vercel.app.evil.test",
+    "https://unrelated.vercel.app",
+    "http://feet-a1b2c3-hugh-team.vercel.app",
+  ]) assert.throws(() => verify(origin), /Request origin could not be verified/);
+
+  const production = load("src/lib/auth.ts", {
+    "next/headers": {},
+    "next/navigation": {},
+    "@/lib/db": {},
+    "@/lib/release-gates": {},
+  }, {
+    NODE_ENV: "production",
+    VERCEL_ENV: "production",
+    APP_URL: "https://feet.example.com",
+    VERCEL_URL: "feet-a1b2c3-hugh-team.vercel.app",
+  });
+  assert.throws(
+    () => production.assertSameOrigin(new Request("https://app.example/api", { headers: { origin: "https://feet-a1b2c3-hugh-team.vercel.app" } })),
+    /Request origin could not be verified/,
+  );
+});
+
+test("exact prices, boolean confirmation, currency and reference are required", () => {
+  const order = { id: "order", amount_pence: 1000 };
+  const valid = { confirmed: true, reference_no: "order", invoice_currency: "GBP", invoice_amount: "10.00" };
+  assert.equal(validation.verifiedPaymentMatches(valid, order), true);
+  for (const patch of [{ confirmed: "true" }, { confirmed: false }, { cancelled: true }, { reference_no: "other" }, { invoice_currency: "USD" }, { invoice_amount: "9.99" }, { invoice_amount: "10.01" }, { invoice_amount: "1e1" }, { invoice_amount: 10 }]) {
+    assert.equal(validation.verifiedPaymentMatches({ ...valid, ...patch }, order), false);
+  }
+  for (const amount of ["-10", "10.001", "Infinity", "", "1e1"]) assert.equal(validation.amountInPence(amount), null);
+});
+
+test("only the sandbox checkout host is accepted", () => {
+  assert.equal(validation.sandboxPaymentUrl("https://sandbox.widget.forumpay.com/pay/order?a=1"), "https://sandbox.widget.forumpay.com/pay/order?a=1");
+  for (const url of ["https://evil.test", "https://sandbox.widget.forumpay.com.evil.test", "http://sandbox.widget.forumpay.com", "https://user:pass@sandbox.widget.forumpay.com", "https://sandbox.widget.forumpay.com:444"]) {
+    assert.throws(() => validation.sandboxPaymentUrl(url));
+  }
+});
+
+test("provider calls use Basic auth, secure fixed-price links and stored identifiers", async () => {
+  const calls = [];
+  const api = load("src/lib/forumpay.ts", { fetch: async (url, options) => {
+    calls.push({ url, options });
+    return Response.json({ url: "https://sandbox.widget.forumpay.com/pay/order" });
+  } }, credentials);
+  await api.createForumPaySandboxLink({ id: "order", amountPence: 1000, payerId: "test-user" });
+  const first = calls[0];
+  assert.equal(first.url.href, "https://sandbox.api.forumpay.com/pay/v2/CreatePaymentLink/");
+  assert.equal(first.options.method, "POST");
+  assert.equal(first.options.headers.Authorization, "Basic " + Buffer.from("test:password").toString("base64"));
+  assert.equal(new URLSearchParams(first.options.body).get("invoice_amount"), "10.00");
+  assert.equal(new URLSearchParams(first.options.body).get("secure_link"), "true");
+  assert.equal(new URLSearchParams(first.options.body).get("payer_id"), "test-user");
+  assert.equal(new URLSearchParams(first.options.body).get("allow_multiple_payments"), "false");
+  assert.equal(new URLSearchParams(first.options.body).get("auto_accept_underpayment"), "false");
+  assert.equal(new URLSearchParams(first.options.body).get("webhook_url"), "https://checkout.example.com/api/webhooks/forumpay");
+  await api.checkForumPaySandboxPayment({ paymentId: "stored-id", currency: "BTC", address: "stored-address" });
+  assert.equal(calls[1].url.searchParams.get("payment_id"), "stored-id");
+  assert.equal(calls[1].url.searchParams.get("pos_id"), "widget");
+  assert.equal(calls[1].options.redirect, "error");
+  assert.equal(api.forumPayIntegrationReady(), false);
+  assert.equal(api.forumPaySandboxEnabled(), false);
+});
+
+test("production cannot enable sandbox, and API errors never expose provider payloads", async () => {
+  const api = load("src/lib/forumpay.ts", { fetch: async () => Response.json({ err: "secret payload" }) },
+    { ...credentials, VERCEL_ENV: "production", FORUMPAY_SANDBOX_CHECKOUT_ENABLED: "true" });
+  assert.equal(api.forumPaySandboxEnabled(), false);
+  await assert.rejects(api.checkForumPaySandboxPayment({ paymentId: "p", currency: "BTC", address: "a" }), /ForumPay rejected/);
+});
+
+test("database reconciliation credits exactly once and rejects forged or mismatched notices", async () => {
+  const db = new PGlite();
+  try {
+    await db.exec(`CREATE TABLE users(id uuid PRIMARY KEY);
+      CREATE FUNCTION prevent_token_ledger_mutation() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'immutable'; END $$;`);
+    await db.exec(fs.readFileSync("db/migrations/0007_forumpay_sandbox_checkout.sql", "utf8"));
+    await db.exec(fs.readFileSync("db/migrations/0008_forumpay_webhook_delivery.sql", "utf8"));
+    await db.exec(fs.readFileSync("db/migrations/0009_forumpay_retry_test.sql", "utf8"));
+    // Migration can safely be run twice.
+    await db.exec(fs.readFileSync("db/migrations/0007_forumpay_sandbox_checkout.sql", "utf8"));
+    const user = "11111111-1111-4111-8111-111111111111";
+    const order = "22222222-2222-4222-8222-222222222222";
+    await db.query("INSERT INTO users VALUES ($1)", [user]);
+    await db.query("INSERT INTO forumpay_sandbox_orders(id,user_id,request_key,package_id,amount_pence,tokens,state) VALUES ($1,$2,$1,'test-100',1000,100,'pending')", [order, user]);
+    const sql = async (strings, ...values) => {
+      const query = strings.reduce((text, fragment, i) => text + (i ? "$" + i : "") + fragment, "");
+      return (await db.query(query, values)).rows;
+    };
+    let provider = { confirmed: true, reference_no: order, invoice_amount: "10.00", invoice_currency: "GBP" };
+    const service = load("src/lib/forumpay-checkout.ts", {
+      "@/lib/auth": {}, "@/lib/api": {},
+      "@/lib/db": { getDb: () => sql, queryRows: rows => rows },
+      "@/lib/forumpay": { findForumPaySandboxTransactions: async () => [], checkForumPaySandboxPayment: async () => provider },
+      "@/lib/forumpay-validation": validation,
+    });
+    const insert = async id => db.query("INSERT INTO forumpay_sandbox_notifications(id,order_id,payment_id,currency,address) VALUES ($1,$2,'payment-1','BTC','address')", [id, order]);
+    await insert("forged");
+    provider = { ...provider, reference_no: "other" };
+    await service.reconcileSandboxOrder(order);
+    assert.equal((await db.query("SELECT * FROM forumpay_sandbox_credits")).rows.length, 0);
+    await insert("underpaid");
+    provider = { ...provider, reference_no: order, invoice_amount: "9.00" };
+    await service.reconcileSandboxOrder(order);
+    assert.equal((await db.query("SELECT * FROM forumpay_sandbox_credits")).rows.length, 0);
+    provider = { ...provider, invoice_amount: "10.00", confirmed: false };
+    await insert("pending");
+    await service.reconcileSandboxOrder(order);
+    assert.equal((await db.query("SELECT * FROM forumpay_sandbox_credits")).rows.length, 0);
+    provider = { ...provider, confirmed: true };
+    await Promise.all([service.reconcileSandboxOrder(order), service.reconcileSandboxOrder(order)]);
+    await insert("duplicate");
+    await service.reconcileSandboxOrder(order);
+    const credits = (await db.query("SELECT * FROM forumpay_sandbox_credits")).rows;
+    assert.equal(credits.length, 1);
+    assert.equal(credits[0].tokens, 100);
+    assert.equal((await db.query("SELECT state FROM forumpay_sandbox_orders")).rows[0].state, "confirmed");
+    await assert.rejects(db.query("DELETE FROM forumpay_sandbox_credits"), /immutable/);
+    const webhook = load("src/app/api/webhooks/forumpay/route.ts", {
+      "next/server": { after: () => {} },
+      "@/lib/forumpay-checkout": { reconcileSandboxOrder: async () => {} },
+      "@/lib/api": { jsonError: (error, status) => Response.json({ error }, { status }), readJson: r => r.json() },
+      "@/lib/db": { getDb: () => sql, queryRows: r => r },
+      "@/lib/forumpay": { forumPaySandboxEnabled: () => true, getForumPayConfiguration: () => ({ posId: "WEB1" }) },
+    });
+    const deliver = () => webhook.POST(new Request("https://checkout.example.com/api/webhooks/forumpay", {
+      method: "POST", body: JSON.stringify({ reference_no: order, payment_id: "payment-1", currency: "BTC", address: "address", pos_id: "widget" }),
+    }));
+    assert.equal((await deliver()).status, 200);
+    assert.equal((await deliver()).status, 200);
+    await service.reconcileSandboxOrder(order);
+    const receiptBefore = (await db.query("SELECT processed_at FROM forumpay_sandbox_notifications WHERE delivery_count=2")).rows[0];
+    assert.ok(receiptBefore.processed_at);
+    assert.equal((await deliver()).status, 200);
+    const receipt = (await db.query("SELECT delivery_count, processed_at FROM forumpay_sandbox_notifications WHERE delivery_count=3")).rows[0];
+    assert.ok(receipt.processed_at);
+    assert.equal((await db.query("SELECT count(*)::int AS count FROM forumpay_sandbox_credits")).rows[0].count, 1);
+    await db.query("INSERT INTO forumpay_sandbox_retry_tests(order_id) VALUES ($1)", [order]);
+    const retryDelivery = () => webhook.POST(new Request("https://checkout.example.com/api/webhooks/forumpay/retry-test", {
+      method: "POST", body: JSON.stringify({ reference_no: order, payment_id: "payment-1", currency: "BTC", address: "address", pos_id: "widget" }),
+    }));
+    assert.equal((await retryDelivery()).status, 503);
+    assert.equal((await retryDelivery()).status, 200);
+    const attempts = (await db.query("SELECT response_status,event_id FROM forumpay_sandbox_retry_attempts ORDER BY received_at")).rows;
+    assert.deepEqual(attempts.map(a => a.response_status), [503,200]);
+    assert.equal(attempts[0].event_id, attempts[1].event_id);
+    assert.equal((await db.query("SELECT count(*)::int AS count FROM forumpay_sandbox_credits")).rows[0].count, 1);
+
+  } finally { await db.close(); }
+});
+
+test("checkout rejects unauthenticated users, forged prices and unknown packages before API calls", async () => {
+  let response = { response: Response.json({ error: "Sign in" }, { status: 401 }) };
+  let originValid = true;
+  const route = load("src/app/api/payments/checkout/route.ts", {
+    "@/lib/auth": { assertSameOrigin: () => { if (!originValid) throw new Error("Request origin could not be verified."); } },
+    "@/lib/api": { jsonError: (error, status) => Response.json({ error }, { status }), readJson: r => r.json() },
+    "@/lib/db": { getDb: () => { throw new Error("Database should not be called"); } },
+    "@/lib/forumpay": {},
+    "@/lib/forumpay-checkout": { sandboxBuyer: async () => response },
+    "@/lib/forumpay-validation": validation,
+  });
+  const request = body => new Request("https://checkout.example.com/api/payments/checkout", { method: "POST", body: JSON.stringify(body) });
+  assert.equal((await route.POST(request({}))).status, 401);
+  response = { user: { id: "user" } };
+  const key = "11111111-1111-4111-8111-111111111111";
+  assert.equal((await route.POST(request({ packageId: "test-100", requestKey: key, amount: 1 }))).status, 400);
+  assert.equal((await route.POST(request({ packageId: "free", requestKey: key }))).status, 400);
+  originValid = false;
+  assert.equal((await route.POST(request({ packageId: "test-100", requestKey: key }))).status, 403);
+});
+
+test("unsigned webhook durably enqueues without calling provider or issuing credits", async () => {
+  let writes = 0;
+  const route = load("src/app/api/webhooks/forumpay/route.ts", {
+    "next/server": { after: () => {} },
+    "@/lib/forumpay-checkout": { reconcileSandboxOrder: async () => {} },
+    "@/lib/api": { jsonError: (error, status) => Response.json({ error }, { status }), readJson: r => r.json() },
+    "@/lib/db": { getDb: () => async () => { writes++; return []; } },
+    "@/lib/forumpay": { forumPaySandboxEnabled: () => true, getForumPayConfiguration: () => ({ posId: "WEB1" }) },
+  });
+  const body = { reference_no: "11111111-1111-4111-8111-111111111111", payment_id: "p", pos_id: "WEB1", currency: "BTC", address: "a", confirmed: true };
+  const request = data => new Request("https://checkout.example.com/api/webhooks/forumpay", { method: "POST", body: JSON.stringify(data) });
+  assert.equal((await route.POST(request({ ...body, pos_id: "other" }))).status, 400);
+  assert.equal(writes, 0);
+  assert.equal((await route.POST(request(body))).status, 200);
+  assert.equal(writes, 1);
+});
+
+test("payment status does not verify another user's order", async () => {
+  let verified = false;
+  const route = load("src/app/api/payments/orders/[orderId]/route.ts", {
+    "@/lib/db": { getDb: () => async () => [], queryRows: r => r },
+    "@/lib/api": { jsonError: (error, status) => Response.json({ error }, { status }) },
+    "@/lib/forumpay-checkout": {
+      sandboxBuyer: async () => ({ user: { id: "owner" } }),
+      reconcileSandboxOrder: async () => { verified = true; },
+    },
+  });
+  const response = await route.GET(new Request("https://checkout.example.com"), { params: Promise.resolve({ orderId: "11111111-1111-4111-8111-111111111111" }) });
+  assert.equal(response.status, 404);
+  assert.equal(verified, false);
+});
+
+test("transaction discovery uses the authenticated API with the stored order reference", async () => {
+  let requested;
+  const api = load("src/lib/forumpay.ts", { fetch: async url => {
+    requested = url;
+    return Response.json([{ payment_id: "p", currency: "BTC", address: "a" }]);
+  } }, credentials);
+  const rows = await api.findForumPaySandboxTransactions("stored-reference");
+  assert.equal(requested.pathname, "/pay/v2/GetTransactions/");
+  assert.equal(requested.searchParams.get("reference_no"), "stored-reference");
+  assert.equal(requested.searchParams.get("pos_id"), null);
+  assert.equal(rows[0].payment_id, "p");
+});
+
+test("migration and API validation refuse production even if setup flags are enabled", () => {
+  const { spawnSync } = require("node:child_process");
+  for (const file of ["migrate-forumpay-sandbox.mjs", "validate-forumpay-sandbox.mjs"]) {
+    const result = spawnSync(process.execPath, ["scripts/" + file], {
+      env: { ...process.env, VERCEL_ENV: "production", VERCEL_GIT_COMMIT_REF: "codex/forumpay-sandbox-checkout",
+        FORUMPAY_SANDBOX_DATABASE_ISOLATED: "true", FORUMPAY_SANDBOX_MIGRATE: "true", FORUMPAY_SANDBOX_VALIDATE_API: "true" },
+      encoding: "utf8",
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Preview/);
+  }
+});
+
+test("eligible sandbox buyers reach test checkout while production stays gated", async () => {
+  let enabled = true;
+  let user = { role: "client", status: "active", email_verified_at: "date", age_verified_at: "date" };
+  const page = load("src/app/preview-only/page.tsx", {
+    "next/link": { default: () => null },
+    "next/navigation": { redirect: path => { throw new Error("redirect:" + path); } },
+    "@/lib/auth": { getSessionUser: async () => user },
+    "@/lib/forumpay": { forumPaySandboxEnabled: () => enabled, forumPaySandboxPayoutsEnabled: () => false },
+  });
+  await assert.rejects(page.default(), /redirect:\/sandbox\/checkout/);
+  // Disabled production and ineligible visitors keep the marketplace gate.
+  enabled = false;
+  assert.ok(await page.default());
+  enabled = true;
+  user = { ...user, role: "model" };
+  assert.ok(await page.default());
+});
+
+test("transaction discovery accepts the live invoices envelope", async () => {
+  const api = load("src/lib/forumpay.ts", { fetch: async () =>
+    Response.json({ invoices: [{ payment_id: "provider-payment", pos_id: "widget", currency: "BTC", address: "sandbox-address" }] })
+  }, credentials);
+  const rows = await api.findForumPaySandboxTransactions("stored-reference");
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].payment_id, "provider-payment");
+});
+
+test("payout validation matches creator, amount, recipient, currency and provider ID", () => {
+  const rules=load("src/lib/forumpay-payout-validation.ts",{"@/lib/forumpay-validation":validation});
+  const payout={id:"order",creator_id:"creator",provider_id:"provider",amount_pence:800,address:"btc-"+"a".repeat(32)};
+  const tx={currency:"BTC",address:payout.address,payer_id:"creator",reference_no:"order",invoice_currency:"GBP",approx_invoice_amount:"8.00",amount:"0.0001",status:"pending"};
+  const data={id:"provider",fee_type:"fixed_in",transactions:[tx]};
+  assert.ok(rules.validateSandboxPayout(data,payout));
+  for(const patch of [{address:"btc-"+"b".repeat(32)},{reference_no:"other"},{payer_id:"other"},{invoice_currency:"USD"},{approx_invoice_amount:"8.01"},{currency:"ETH"},{amount:"0"}]){
+    assert.equal(rules.validateSandboxPayout({...data,transactions:[{...tx,...patch}]},payout),null);
+  }
+  assert.equal(rules.validateSandboxPayout({...data,id:"other"},payout),null);
+  assert.equal(rules.validateSandboxPayout({...data,transactions:[tx,tx]},payout),null);
+  assert.equal(rules.isSandboxBtcAddress("bc1-real-chain-address"),false);
+});
+
+test("creator reservations prevent overspending and duplicate payouts, and verified cancellation releases funds", async () => {
+  const db=new PGlite();
+  try{
+    await db.exec(`CREATE TABLE users(id uuid PRIMARY KEY,role text,status text);
+      CREATE FUNCTION prevent_token_ledger_mutation() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'immutable'; END $$;`);
+    await db.exec(fs.readFileSync("db/migrations/0010_forumpay_sandbox_payouts.sql","utf8"));
+    const creator="11111111-1111-4111-8111-111111111111", id="22222222-2222-4222-8222-222222222222", key="33333333-3333-4333-8333-333333333333", other="44444444-4444-4444-8444-444444444444", address="btc-"+"a".repeat(32);
+    await db.query("INSERT INTO users VALUES($1,'model','active')",[creator]);
+    await db.query("INSERT INTO forumpay_sandbox_creator_earnings(creator_id,amount_pence,reference) VALUES($1,800,'synthetic')",[creator]);
+    const reserve=(pid,pkey,amount)=>db.query("SELECT reserve_forumpay_sandbox_payout($1,$2,$3,$4,$5) AS id",[pid,creator,pkey,amount,address]);
+    assert.equal((await reserve(id,key,800)).rows[0].id,id);
+    assert.equal((await reserve(other,key,800)).rows[0].id,id);
+    await assert.rejects(reserve(other,key,700),/Idempotency conflict/);
+    await assert.rejects(reserve(other,other,100),/Insufficient/);
+    await db.query("UPDATE forumpay_sandbox_payouts SET state='scheduled' WHERE id=$1",[id]);
+    await assert.rejects(reserve(other,other,100),/Insufficient/);
+    await db.query("UPDATE forumpay_sandbox_payouts SET state='cancelled' WHERE id=$1",[id]);
+    assert.equal((await reserve(other,other,800)).rows[0].id,other);
+    await assert.rejects(db.query("UPDATE forumpay_sandbox_creator_earnings SET amount_pence=900"),/immutable/);
+  }finally{await db.close();}
+});
+
+test("production cannot enable payout endpoints even with payout flag set",()=>{
+  const api=load("src/lib/forumpay.ts",{}, {...credentials,VERCEL_ENV:"production",FORUMPAY_SANDBOX_CHECKOUT_ENABLED:"true",FORUMPAY_SANDBOX_PAYOUTS_ENABLED:"true",FORUMPAY_SANDBOX_DATABASE_ISOLATED:"true"});
+  assert.equal(api.forumPaySandboxPayoutsEnabled(),false);
+});
+
+test("creator wallet summary is in whole pence and never releases held funds",()=>{
+  const wallet=load("src/lib/creator-wallet.ts");
+  const sum=(earned,totals)=>JSON.parse(JSON.stringify(wallet.summarizeWallet(earned,totals)));
+  assert.deepEqual(sum("800",{}),{earnedPence:800,paidPence:0,reservedPence:0,availablePence:800});
+  // The existing £8 payout is scheduled: still reserved, nothing available, nothing paid.
+  assert.deepEqual(sum("800",{scheduled:"800"}),{earnedPence:800,paidPence:0,reservedPence:800,availablePence:0});
+  assert.deepEqual(sum(800,{paid:300,pending_confirmation:200,cancelled:500}),{earnedPence:800,paidPence:300,reservedPence:200,availablePence:300});
+  for(const state of ["creating","pending_confirmation","confirming","scheduled","cancelling","review","unknown_future_state"]){
+    assert.equal(sum(800,{[state]:800}).reservedPence,800,state);
+    assert.equal(sum(800,{[state]:800}).availablePence,0,state);
+  }
+  assert.equal(sum(800,{cancelled:800}).availablePence,800);
+  // Bad inputs fail closed: no negative, fractional or non-numeric money.
+  assert.deepEqual(sum(-5,{paid:"1.5",scheduled:"abc"}),{earnedPence:0,paidPence:0,reservedPence:0,availablePence:0});
+  assert.equal(sum(100,{paid:900}).availablePence,0);
+});
+
+test("every payout state has a status and only paid and cancelled release the hold",()=>{
+  const wallet=load("src/lib/creator-wallet.ts");
+  for(const state of wallet.PAYOUT_STATES){
+    const status=wallet.describePayoutState(state);
+    assert.ok(status.label&&status.detail,state);
+    assert.equal(status.holdsFunds,!["paid","cancelled"].includes(state),state);
+  }
+  assert.equal(wallet.describePayoutState("review").kind,"attention");
+  assert.equal(wallet.describePayoutState("pending_confirmation").kind,"action");
+  assert.equal(wallet.describePayoutState("something_new").holdsFunds,true);
+  assert.deepEqual(["£0.00","£0.05","£8.00","£1234.56","-£0.99"],[0,5,800,123456,-99].map(wallet.formatPence));
+});

@@ -8,6 +8,8 @@ import type { ReactNode } from "react";
 import ConnectedMessages from "@/components/ConnectedMessages";
 import ConnectedSettings from "@/components/ConnectedSettings";
 import CreatorMedia from "@/components/CreatorMedia";
+import SandboxPayouts from "@/components/SandboxPayouts";
+import SandboxCheckout from "@/components/SandboxCheckout";
 
 type Role = "client" | "model";
 type Section = "home" | "content" | "media" | "messages" | "broadcasts" | "settings" | "wallet";
@@ -17,16 +19,17 @@ const iconFor: Record<string, ReactNode> = {
   home: <Home size={17} />, explore: <Compass size={17} />, content: <FileImage size={17} />, media: <FileImage size={17} />, messages: <MessageCircle size={17} />, broadcasts: <Video size={17} />, wallet: <Wallet size={17} />, settings: <Settings size={17} />,
 };
 
-export default function PortalScreen({ role, section }: { role: Role; section: Section }) {
+export default function PortalScreen({ role, section, sandboxPayoutsEnabled = false, sandboxCheckoutEnabled = false }: { role: Role; section: Section; sandboxPayoutsEnabled?: boolean; sandboxCheckoutEnabled?: boolean }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
   const [creators, setCreators] = useState<Creator[]>([]);
-  const [creatorLoading, setCreatorLoading] = useState(false);
+  const [creatorsLoaded, setCreatorsLoaded] = useState(false);
   const [notice, setNotice] = useState("");
   const [showWalletMenu, setShowWalletMenu] = useState(false);
   const [accountName, setAccountName] = useState("");
   const isModel = role === "model";
+  const creatorLoading = !isModel && section === "home" && !creatorsLoaded;
 
   useEffect(() => {
     let active = true;
@@ -41,12 +44,11 @@ export default function PortalScreen({ role, section }: { role: Role; section: S
   useEffect(() => {
     if (isModel || section !== "home") return;
     let active = true;
-    setCreatorLoading(true);
     fetch("/api/creators", { cache: "no-store" }).then(async (response) => {
       if (!response.ok) throw new Error("Creator discovery is unavailable.");
       const result = await response.json() as { creators?: Creator[] };
       if (active) setCreators(result.creators ?? []);
-    }).catch(() => { if (active) setCreators([]); }).finally(() => { if (active) setCreatorLoading(false); });
+    }).catch(() => { if (active) setCreators([]); }).finally(() => { if (active) setCreatorsLoaded(true); });
     return () => { active = false; };
   }, [isModel, section]);
 
@@ -78,13 +80,13 @@ export default function PortalScreen({ role, section }: { role: Role; section: S
   return <div className="portal">
     <aside className="portal-sidebar"><Link href="/" className="brand"><span className="brand-mark">m</span><span>my feet <b>show</b></span></Link><div className="workspace-chip"><span className={`workspace-avatar ${isModel ? "model-avatar" : "client-avatar"}`}>{names.first.slice(0, 1).toUpperCase()}</span><span><b>{names.first}</b><small>{names.role} account</small></span><ChevronDown size={15}/></div><nav className="side-nav">{nav.map((item) => <div key={item.key}>{item.group && <span className="nav-group-label">{item.group}</span>}<Link href={item.route} className={section === item.key ? "side-link active" : "side-link"}>{iconFor[item.key]}<span>{item.label}</span></Link></div>)}</nav><Link className="portal-switch" href={isModel ? "/client" : "/model"}><ArrowUpRight size={14}/> Switch to {isModel ? "client" : "creator"} view</Link><div className="side-help"><span className="help-spark"><Sparkles size={15}/></span><b>Need a hand?</b><p>Our friendly team is just a message away.</p><button onClick={() => notify("Support is not connected yet.")}>Visit help centre <ArrowRight size={14}/></button></div><button className="side-signout" onClick={async () => { try { await fetch("/api/auth/logout", { method: "POST" }); } finally { router.replace("/"); } }}><LogOut size={16}/> Sign out</button></aside>
     <div className="portal-main"><header className="portal-topbar"><div className="breadcrumb"><Link href="/">My Feet Show</Link><span>/</span><b>{nav.find((item) => item.key === section)?.label ?? "Home"}</b></div><div className="topbar-actions"><button className="icon-button notification-button" aria-label="Notifications" onClick={() => notify("Notifications are not connected yet.")}><Bell size={18}/></button><div className="wallet-control"><button className="token-pill" onClick={() => setShowWalletMenu(!showWalletMenu)}><span className="coin">✦</span><span><b>—</b><small>not connected</small></span><ChevronDown size={15}/></button>{showWalletMenu && <div className="wallet-popover"><div className="wallet-pop-head"><span className="coin">✦</span><span><b>Token wallet</b><small>Unavailable</small></span></div><div className="wallet-pop-balance">Purchases and payouts are disabled</div><Link href={`/${role}/wallet`} className="button button-dark button-full">Wallet status <ArrowRight size={15}/></Link></div>}</div><Link className="top-avatar" href={`/${role}/settings`}>{isModel ? "M" : "A"}</Link></div></header>
-      <main className="portal-content"><div className="portal-preview-notice" role="note">Profile data, likes, blocks, reports, comments, creator uploads, settings, moderation review, and Twilio messages are connected. Uploaded media stays private until approval. Purchases, payouts, content delivery, and paid video calls remain disabled while processor, scanning, billing, and safety setup are incomplete.</div>
+      <main className="portal-content"><div className="portal-preview-notice" role="note">Profile data, likes, blocks, reports, comments, creator uploads, settings, moderation review, and Twilio messages are connected. Uploaded media stays private until approval. Production purchases, payouts, content delivery, and paid video calls remain disabled; isolated Preview wallet tests use synthetic balances only.</div>
         {section === "home" && (isModel ? <ModelHome /> : <ClientHome search={search} setSearch={setSearch} filter={filter} setFilter={setFilter} filtered={filteredCreators} loading={creatorLoading} onLike={toggleLike} onBlock={(slug) => { const creator = creators.find((item) => item.slug === slug); if (creator) void blockCreator(creator); }} />)}
         {section === "content" && <PaymentsUnavailable />}
         {section === "media" && <CreatorMedia />}
         {section === "messages" && <ConnectedMessages role={role} />}
         {section === "broadcasts" && <VideoUnavailable />}
-        {section === "wallet" && <WalletPage role={role} />}
+        {section === "wallet" && <WalletPage role={role} sandboxPayoutsEnabled={sandboxPayoutsEnabled} sandboxCheckoutEnabled={sandboxCheckoutEnabled} />}
         {section === "settings" && <ConnectedSettings role={role} />}
       </main><footer className="portal-footer"><span>© 2026 My Feet Show</span><span><Link href="/legal/terms">Terms</Link><Link href="/legal/privacy">Privacy</Link><Link href="/legal/safety">Safety</Link><Link href="/legal/tokens">Tokens</Link><Link href="/legal/cookies">Cookies</Link></span></footer></div>
     {notice && <div className="toast"><span className="toast-check"><Check size={15}/></span>{notice}<button aria-label="Dismiss notice" onClick={() => setNotice("")}><X size={14}/></button></div>}
@@ -117,7 +119,9 @@ function VideoUnavailable() {
   return <div className="service-unavailable"><span className="eyebrow">LIVE, TOGETHER</span><h1>Broadcasts</h1><p>Video room access stays disabled until the paid-session ledger, per-minute billing, moderation staffing, and UK safety review are complete.</p><button className="button button-outline" disabled>Video calls unavailable</button></div>;
 }
 
-function WalletPage({ role }: { role: Role }) {
+function WalletPage({ role, sandboxPayoutsEnabled, sandboxCheckoutEnabled }: { role: Role; sandboxPayoutsEnabled: boolean; sandboxCheckoutEnabled: boolean }) {
   const isModel = role === "model";
-  return <><PageHeading eyebrow="WALLET" title={isModel ? "Earnings" : "Wallet"} description="Wallet activity is not available yet."/><div className="payout-note"><ShieldCheck size={18}/><div><b>{isModel ? "Payouts are disabled" : "Purchases are disabled"}</b><p>{isModel ? "Earnings and withdrawals will appear after an eligible payout provider, verified ledger, and commercial terms are in place." : "No token balance or purchase is available. Checkout will only be enabled after payment-provider approval and implementation."}</p></div></div><button className="button button-dark checkout-button" disabled>{isModel ? "Withdrawals unavailable" : "Purchases unavailable"}</button><div className="wallet-fineprint"><LockKeyhole size={14}/><span>Nothing on this screen moves money. <Link href="/legal/tokens">Read the draft token policy.</Link></span></div></>;
+  if (isModel && sandboxPayoutsEnabled) return <SandboxPayouts embedded />;
+  if (!isModel && sandboxCheckoutEnabled) return <SandboxCheckout embedded />;
+  return <><PageHeading eyebrow="WALLET" title={isModel ? "Earnings" : "Wallet"} description="Wallet activity is not available yet."/><div className="payout-note"><ShieldCheck size={18}/><div><b>{isModel ? "Payouts are disabled" : "Purchases are disabled"}</b><p>{isModel ? "Earnings and withdrawals will appear after an eligible payout provider, verified ledger, and commercial terms are in place." : "Real token purchases are not enabled. Eligible clients can use the isolated Preview test checkout when it is available."}</p></div></div><button className="button button-dark checkout-button" disabled>{isModel ? "Withdrawals unavailable" : "Real purchases unavailable"}</button><div className="wallet-fineprint"><LockKeyhole size={14}/><span>Nothing on this screen moves money. <Link href="/legal/tokens">Read the draft token policy.</Link></span></div></>;
 }
