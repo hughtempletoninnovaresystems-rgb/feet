@@ -6,6 +6,7 @@ import { getDb, queryRows } from "@/lib/db";
 import { forumPayPayoutRequest } from "@/lib/forumpay";
 import { sandboxCreator, reconcileSandboxPayout } from "@/lib/forumpay-payouts";
 import { isSandboxBtcAddress, type SandboxPayout } from "@/lib/forumpay-payout-validation";
+import { describePayoutState, summarizeWallet } from "@/lib/creator-wallet";
 
 export const runtime = "nodejs";
 const schema = z.object({ requestKey:z.string().uuid(), amountPence:z.number().int().min(100).max(100000), address:z.string().refine(isSandboxBtcAddress) }).strict();
@@ -18,11 +19,12 @@ export async function GET(request:Request) {
     for (const p of payouts.filter(p=>!["creating","paid","cancelled","review"].includes(p.state)).slice(0,3)) {
       try { await reconcileSandboxPayout(p); } catch { /* Reservation remains until verified. */ }
     }
-    const balances=queryRows<{earned:string;reserved:string}>(await sql`SELECT
-      COALESCE((SELECT sum(amount_pence) FROM forumpay_sandbox_creator_earnings WHERE creator_id=${auth.user.id}),0)::text AS earned,
-      COALESCE((SELECT sum(amount_pence) FROM forumpay_sandbox_payouts WHERE creator_id=${auth.user.id} AND state <> 'cancelled'),0)::text AS reserved`)[0];
-    const rows=await sql`SELECT id,amount_pence,address,state,crypto_amount,txid FROM forumpay_sandbox_payouts WHERE creator_id=${auth.user.id} ORDER BY created_at DESC LIMIT 20`;
-    return Response.json({availablePence:Number(balances.earned)-Number(balances.reserved),earnedPence:Number(balances.earned),payouts:rows},{headers:{"Cache-Control":"private, no-store"}});
+    const earned=queryRows<{earned:string}>(await sql`SELECT COALESCE(sum(amount_pence),0)::text AS earned FROM forumpay_sandbox_creator_earnings WHERE creator_id=${auth.user.id}`)[0];
+    const totals=queryRows<{state:string;total:string}>(await sql`SELECT state,sum(amount_pence)::text AS total FROM forumpay_sandbox_payouts WHERE creator_id=${auth.user.id} GROUP BY state`);
+    const summary=summarizeWallet(earned?.earned,Object.fromEntries(totals.map(t=>[t.state,t.total])));
+    const rows=queryRows<{state:string}>(await sql`SELECT id,amount_pence,address,state,crypto_amount,txid,created_at,updated_at FROM forumpay_sandbox_payouts WHERE creator_id=${auth.user.id} ORDER BY created_at DESC LIMIT 20`)
+      .map(p=>({...p,status:describePayoutState(p.state)}));
+    return Response.json({...summary,payouts:rows},{headers:{"Cache-Control":"private, no-store"}});
   } catch {return jsonError("Sandbox payout wallet unavailable.",503);}
 }
 export async function POST(request:Request) {

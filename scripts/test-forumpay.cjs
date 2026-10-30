@@ -297,3 +297,33 @@ test("production cannot enable payout endpoints even with payout flag set",()=>{
   const api=load("src/lib/forumpay.ts",{}, {...credentials,VERCEL_ENV:"production",FORUMPAY_SANDBOX_CHECKOUT_ENABLED:"true",FORUMPAY_SANDBOX_PAYOUTS_ENABLED:"true",FORUMPAY_SANDBOX_DATABASE_ISOLATED:"true"});
   assert.equal(api.forumPaySandboxPayoutsEnabled(),false);
 });
+
+test("creator wallet summary is in whole pence and never releases held funds",()=>{
+  const wallet=load("src/lib/creator-wallet.ts");
+  const sum=(earned,totals)=>JSON.parse(JSON.stringify(wallet.summarizeWallet(earned,totals)));
+  assert.deepEqual(sum("800",{}),{earnedPence:800,paidPence:0,reservedPence:0,availablePence:800});
+  // The existing £8 payout is scheduled: still reserved, nothing available, nothing paid.
+  assert.deepEqual(sum("800",{scheduled:"800"}),{earnedPence:800,paidPence:0,reservedPence:800,availablePence:0});
+  assert.deepEqual(sum(800,{paid:300,pending_confirmation:200,cancelled:500}),{earnedPence:800,paidPence:300,reservedPence:200,availablePence:300});
+  for(const state of ["creating","pending_confirmation","confirming","scheduled","cancelling","review","unknown_future_state"]){
+    assert.equal(sum(800,{[state]:800}).reservedPence,800,state);
+    assert.equal(sum(800,{[state]:800}).availablePence,0,state);
+  }
+  assert.equal(sum(800,{cancelled:800}).availablePence,800);
+  // Bad inputs fail closed: no negative, fractional or non-numeric money.
+  assert.deepEqual(sum(-5,{paid:"1.5",scheduled:"abc"}),{earnedPence:0,paidPence:0,reservedPence:0,availablePence:0});
+  assert.equal(sum(100,{paid:900}).availablePence,0);
+});
+
+test("every payout state has a status and only paid and cancelled release the hold",()=>{
+  const wallet=load("src/lib/creator-wallet.ts");
+  for(const state of wallet.PAYOUT_STATES){
+    const status=wallet.describePayoutState(state);
+    assert.ok(status.label&&status.detail,state);
+    assert.equal(status.holdsFunds,!["paid","cancelled"].includes(state),state);
+  }
+  assert.equal(wallet.describePayoutState("review").kind,"attention");
+  assert.equal(wallet.describePayoutState("pending_confirmation").kind,"action");
+  assert.equal(wallet.describePayoutState("something_new").holdsFunds,true);
+  assert.deepEqual(["£0.00","£0.05","£8.00","£1234.56","-£0.99"],[0,5,800,123456,-99].map(wallet.formatPence));
+});
