@@ -4,7 +4,9 @@
 
 My Feet Show is a pre-production Next.js creator marketplace. The current work replaces Segpay with ForumPay and tests payments and creator payouts in an isolated Preview environment. Production marketplace services remain gated. The user has asked to leave the pending sandbox payout alone for now and save this handover to conserve ChatGPT usage.
 
-**Next recommended feature:** improve the creator wallet, showing synthetic earnings, available balance, reserved payouts, payout history and status. Then consider a separate sandbox paid-content flow. Existing checkout test tokens cannot currently purchase content or fund calls.
+**Current implementation:** the creator model wallet now surfaces the Preview-only payout sandbox with synthetic earnings, available and reserved balances, payout history, explicit provider status, and review-before-confirmation controls. Production payouts remain disabled.
+
+**Next recommended step:** exercise the creator wallet in the isolated Preview with the synthetic creator account, verify the existing payout remains reserved until ForumPay confirms its blockchain outcome, and test the review/cancel/error states without creating a replacement payout. Then consider a separate sandbox paid-content flow. Existing checkout test tokens cannot currently purchase content or fund calls.
 
 ## Repository and deployment
 
@@ -117,12 +119,11 @@ Useful commands: `npm run test:payments`, `npm run typecheck`, `npm run check:en
 
 Remaining priorities:
 
-1. Polish the creator wallet around the existing isolated payout API, including clear reserved/available balances and meaningful pending/error states.
-2. Verify the existing payout's final status when the user resumes testing; record confirmation only after authoritative provider evidence.
+1. Exercise the creator wallet in the isolated Preview and cover explicit rejection, timeout, cancellation, stale balances and concurrent actions. Do not describe API smoke tests as full browser acceptance.
+2. Verify the existing payout's final status when the user resumes testing; record confirmation only after authoritative provider evidence. Never create a replacement.
 3. Remove or simplify temporary diagnostics and move operator tests out of prebuild where practical.
-4. Test payout UI end to end and cover explicit rejection, timeout, cancellation and concurrent actions. Do not describe API smoke tests as full browser acceptance.
-5. Build sandbox paid-content purchases and earnings attribution as separate work; current £8 is synthetic.
-6. Complete production refund/reversal accounting, settlement reconciliation, real creator earnings policy, payout operations and launch gates before enabling real money.
+4. Build sandbox paid-content purchases and earnings attribution as separate work; current £8 remains synthetic.
+5. Complete production refund/reversal accounting, settlement reconciliation, real creator earnings policy, payout operations and launch gates before enabling real money.
 
 Authentication, Didit age assurance, private S3 uploads, moderation and Twilio services exist elsewhere in the project but remain subject to incomplete configuration/review and release gates. This handover does not certify them as production-ready. Test account eligibility is synthetic; never copy that bypass into production. Test-account passwords are intentionally omitted; recover securely or reset only the isolated fixture if needed.
 

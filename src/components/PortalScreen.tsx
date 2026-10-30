@@ -8,6 +8,7 @@ import type { ReactNode } from "react";
 import ConnectedMessages from "@/components/ConnectedMessages";
 import ConnectedSettings from "@/components/ConnectedSettings";
 import CreatorMedia from "@/components/CreatorMedia";
+import SandboxPayouts from "@/components/SandboxPayouts";
 
 type Role = "client" | "model";
 type Section = "home" | "content" | "media" | "messages" | "broadcasts" | "settings" | "wallet";
@@ -17,7 +18,7 @@ const iconFor: Record<string, ReactNode> = {
   home: <Home size={17} />, explore: <Compass size={17} />, content: <FileImage size={17} />, media: <FileImage size={17} />, messages: <MessageCircle size={17} />, broadcasts: <Video size={17} />, wallet: <Wallet size={17} />, settings: <Settings size={17} />,
 };
 
-export default function PortalScreen({ role, section }: { role: Role; section: Section }) {
+export default function PortalScreen({ role, section, sandboxPayoutsEnabled = false }: { role: Role; section: Section; sandboxPayoutsEnabled?: boolean }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
@@ -84,7 +85,7 @@ export default function PortalScreen({ role, section }: { role: Role; section: S
         {section === "media" && <CreatorMedia />}
         {section === "messages" && <ConnectedMessages role={role} />}
         {section === "broadcasts" && <VideoUnavailable />}
-        {section === "wallet" && <WalletPage role={role} />}
+        {section === "wallet" && <WalletPage role={role} sandboxPayoutsEnabled={sandboxPayoutsEnabled} />}
         {section === "settings" && <ConnectedSettings role={role} />}
       </main><footer className="portal-footer"><span>© 2026 My Feet Show</span><span><Link href="/legal/terms">Terms</Link><Link href="/legal/privacy">Privacy</Link><Link href="/legal/safety">Safety</Link><Link href="/legal/tokens">Tokens</Link><Link href="/legal/cookies">Cookies</Link></span></footer></div>
     {notice && <div className="toast"><span className="toast-check"><Check size={15}/></span>{notice}<button aria-label="Dismiss notice" onClick={() => setNotice("")}><X size={14}/></button></div>}
@@ -117,7 +118,8 @@ function VideoUnavailable() {
   return <div className="service-unavailable"><span className="eyebrow">LIVE, TOGETHER</span><h1>Broadcasts</h1><p>Video room access stays disabled until the paid-session ledger, per-minute billing, moderation staffing, and UK safety review are complete.</p><button className="button button-outline" disabled>Video calls unavailable</button></div>;
 }
 
-function WalletPage({ role }: { role: Role }) {
+function WalletPage({ role, sandboxPayoutsEnabled }: { role: Role; sandboxPayoutsEnabled: boolean }) {
   const isModel = role === "model";
+  if (isModel && sandboxPayoutsEnabled) return <SandboxPayouts embedded />;
   return <><PageHeading eyebrow="WALLET" title={isModel ? "Earnings" : "Wallet"} description="Wallet activity is not available yet."/><div className="payout-note"><ShieldCheck size={18}/><div><b>{isModel ? "Payouts are disabled" : "Purchases are disabled"}</b><p>{isModel ? "Earnings and withdrawals will appear after an eligible payout provider, verified ledger, and commercial terms are in place." : "No token balance or purchase is available. Checkout will only be enabled after payment-provider approval and implementation."}</p></div></div><button className="button button-dark checkout-button" disabled>{isModel ? "Withdrawals unavailable" : "Purchases unavailable"}</button><div className="wallet-fineprint"><LockKeyhole size={14}/><span>Nothing on this screen moves money. <Link href="/legal/tokens">Read the draft token policy.</Link></span></div></>;
 }

@@ -1,2 +1,8 @@
 import PortalScreen from "@/components/PortalScreen";
-export default function ModelWallet() { return <PortalScreen role="model" section="wallet" />; }
+import { forumPaySandboxPayoutsEnabled } from "@/lib/forumpay";
+
+export const dynamic = "force-dynamic";
+
+export default function ModelWallet() {
+  return <PortalScreen role="model" section="wallet" sandboxPayoutsEnabled={forumPaySandboxPayoutsEnabled()} />;
+}
