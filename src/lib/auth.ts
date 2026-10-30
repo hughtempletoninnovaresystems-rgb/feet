@@ -79,9 +79,15 @@ export function assertSameOrigin(request: Request) {
   try {
     const expected = new URL(appUrl);
     const received = new URL(origin);
+    const allowedOrigins = new Set([expected.origin]);
+    const deploymentHost = process.env.VERCEL_URL;
+    if (process.env.VERCEL_ENV === "preview" && deploymentHost &&
+        /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+vercel\.app$/.test(deploymentHost)) {
+      allowedOrigins.add(`https://${deploymentHost}`);
+    }
     if (!(["http:", "https:"].includes(expected.protocol)) || expected.username || expected.password) throw new Error("Request origin could not be verified.");
     if (process.env.NODE_ENV === "production" && expected.protocol !== "https:") throw new Error("Request origin could not be verified.");
-    if (received.origin !== origin || origin !== expected.origin) throw new Error("Request origin could not be verified.");
+    if (received.origin !== origin || !allowedOrigins.has(origin)) throw new Error("Request origin could not be verified.");
   } catch {
     throw new Error("Request origin could not be verified.");
   }

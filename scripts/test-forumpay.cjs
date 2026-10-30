@@ -21,6 +21,44 @@ function load(file, mocks = {}, env = {}) {
 const validation = load("src/lib/forumpay-validation.ts");
 const credentials = { PAYMENT_PROVIDER: "forumpay", FORUMPAY_API_USERNAME: "test", FORUMPAY_API_PASSWORD: "password", FORUMPAY_POS_ID: "WEB1", APP_URL: "https://checkout.example.com" };
 
+test("same-origin validation accepts only the configured site and exact Preview deployment URL", () => {
+  const auth = load("src/lib/auth.ts", {
+    "next/headers": {},
+    "next/navigation": {},
+    "@/lib/db": {},
+    "@/lib/release-gates": {},
+  }, {
+    NODE_ENV: "production",
+    VERCEL_ENV: "preview",
+    APP_URL: "https://feet-git-branch-example.vercel.app",
+    VERCEL_URL: "feet-a1b2c3-hugh-team.vercel.app",
+  });
+  const verify = origin => auth.assertSameOrigin(new Request("https://app.example/api", { headers: { origin } }));
+  assert.doesNotThrow(() => verify("https://feet-git-branch-example.vercel.app"));
+  assert.doesNotThrow(() => verify("https://feet-a1b2c3-hugh-team.vercel.app"));
+  for (const origin of [
+    "https://feet-a1b2c3-hugh-team.vercel.app.evil.test",
+    "https://unrelated.vercel.app",
+    "http://feet-a1b2c3-hugh-team.vercel.app",
+  ]) assert.throws(() => verify(origin), /Request origin could not be verified/);
+
+  const production = load("src/lib/auth.ts", {
+    "next/headers": {},
+    "next/navigation": {},
+    "@/lib/db": {},
+    "@/lib/release-gates": {},
+  }, {
+    NODE_ENV: "production",
+    VERCEL_ENV: "production",
+    APP_URL: "https://feet.example.com",
+    VERCEL_URL: "feet-a1b2c3-hugh-team.vercel.app",
+  });
+  assert.throws(
+    () => production.assertSameOrigin(new Request("https://app.example/api", { headers: { origin: "https://feet-a1b2c3-hugh-team.vercel.app" } })),
+    /Request origin could not be verified/,
+  );
+});
+
 test("exact prices, boolean confirmation, currency and reference are required", () => {
   const order = { id: "order", amount_pence: 1000 };
   const valid = { confirmed: true, reference_no: "order", invoice_currency: "GBP", invoice_amount: "10.00" };
