@@ -35,7 +35,7 @@ Use the connected Personal GitHub/Vercel accounts belonging to Hugh. Shell GitHu
 ### Checkout
 
 - Package chosen by the user: **£10 for 100 tokens**.
-- `/sandbox/checkout` creates a hosted ForumPay test payment link for an authenticated eligible client.
+- `/sandbox/checkout` creates a hosted ForumPay test payment link for an authenticated eligible client. The app-owned page has a separate test-purchase layout and is embedded in the client's Wallet page when the Preview checkout flag is enabled; the hosted payment form is rendered by ForumPay.
 - A real provider sandbox payment was completed and verified server-side, granting exactly 100 isolated test tokens.
 - Repeated reconciliation and webhook delivery did not grant additional tokens.
 - Test tokens cannot fund real wallets, content purchases, calls or withdrawals.
