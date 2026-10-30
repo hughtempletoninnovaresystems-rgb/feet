@@ -7,6 +7,7 @@ export default function FundedVideoRoom({ callId }: { callId: string }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const roomRef = useRef<Room | null>(null);
   const [busy, setBusy] = useState(false);
+  const [connected, setConnected] = useState(false);
   const [status, setStatus] = useState("Join only if you are ready to share your camera and microphone.");
   const [error, setError] = useState("");
 
@@ -20,6 +21,7 @@ export default function FundedVideoRoom({ callId }: { callId: string }) {
       const video = await import("twilio-video");
       const room = await video.connect(data.token, { name: data.roomName, audio: true, video: { width: 1280, height: 720 } });
       roomRef.current = room;
+      setConnected(true);
       setStatus("Connected. Leave the session when you are finished.");
       const stage = stageRef.current;
       const attachTrack = (track: RemoteTrack | LocalTrack) => {
@@ -39,7 +41,7 @@ export default function FundedVideoRoom({ callId }: { callId: string }) {
       room.on("participantConnected", attachParticipant);
       room.on("trackSubscribed", attachTrack);
       room.on("trackUnsubscribed", (track) => { if (track.kind !== "data") track.detach().forEach((element) => element.remove()); });
-      room.on("disconnected", () => { roomRef.current = null; if (stageRef.current) stageRef.current.replaceChildren(); setStatus("The video session has ended."); });
+      room.on("disconnected", () => { roomRef.current = null; setConnected(false); if (stageRef.current) stageRef.current.replaceChildren(); setStatus("The video session has ended."); });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "The video session could not be joined.");
       setStatus("Not connected.");
@@ -49,9 +51,10 @@ export default function FundedVideoRoom({ callId }: { callId: string }) {
   const leave = () => {
     roomRef.current?.disconnect();
     roomRef.current = null;
+    setConnected(false);
     stageRef.current?.replaceChildren();
     setStatus("You left the video session.");
   };
 
-  return <main className="funded-video-page"><header><span className="eyebrow">PRIVATE VIDEO SESSION</span><h1>Video call</h1><p>{status}</p></header>{error && <p role="alert" className="creator-media-error">{error}</p>}<div className="funded-video-stage" ref={stageRef}/><div className="funded-video-actions"><button className="button button-dark" onClick={() => void join()} disabled={busy || Boolean(roomRef.current)}>{busy ? "Connecting…" : "Join call"}</button>{roomRef.current && <button className="button button-outline" onClick={leave}>Leave call</button>}</div><p className="chat-safety">Use the report controls in your account if anything feels unsafe.</p></main>;
+  return <main className="funded-video-page"><header><span className="eyebrow">PRIVATE VIDEO SESSION</span><h1>Video call</h1><p>{status}</p></header>{error && <p role="alert" className="creator-media-error">{error}</p>}<div className="funded-video-stage" ref={stageRef}/><div className="funded-video-actions"><button className="button button-dark" onClick={() => void join()} disabled={busy || connected}>{busy ? "Connecting…" : "Join call"}</button>{connected && <button className="button button-outline" onClick={leave}>Leave call</button>}</div><p className="chat-safety">Use the report controls in your account if anything feels unsafe.</p></main>;
 }

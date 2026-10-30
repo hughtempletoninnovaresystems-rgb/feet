@@ -15,10 +15,11 @@ export default function ModerationQueue() {
     const response = await fetch("/api/admin/moderation", { cache: "no-store" });
     const data = await response.json() as Queue & { error?: string };
     if (!response.ok) throw new Error(data.error ?? "Moderation queue is unavailable.");
-    setQueue(data);
+    return data;
   }, []);
 
-  useEffect(() => { void load().catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Moderation queue is unavailable.")); }, [load]);
+  const handleLoadError = useCallback((reason: unknown) => setError(reason instanceof Error ? reason.message : "Moderation queue is unavailable."), []);
+  useEffect(() => { void load().then(setQueue).catch(handleLoadError); }, [handleLoadError, load]);
 
   const decide = async (input: Record<string, string>) => {
     setBusy(input.id);
@@ -27,7 +28,7 @@ export default function ModerationQueue() {
       const response = await fetch("/api/admin/moderation", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
       const data = await response.json() as { error?: string };
       if (!response.ok) throw new Error(data.error ?? "Decision could not be saved.");
-      await load();
+      setQueue(await load());
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Decision could not be saved.");
     } finally {
@@ -35,7 +36,7 @@ export default function ModerationQueue() {
     }
   };
 
-  return <main className="moderation-page"><header><div><span className="eyebrow">OPERATIONS</span><h1>Moderation queue</h1><p>Review each item, record decisions, and keep unresolved reports visible to the team.</p></div><button className="button button-outline" onClick={() => void load().catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Queue refresh failed."))}>Refresh</button></header>
+  return <main className="moderation-page"><header><div><span className="eyebrow">OPERATIONS</span><h1>Moderation queue</h1><p>Review each item, record decisions, and keep unresolved reports visible to the team.</p></div><button className="button button-outline" onClick={() => void load().then(setQueue).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Queue refresh failed."))}>Refresh</button></header>
     {error && <p role="alert" className="moderation-error">{error}</p>}
     <section><h2>Uploaded media ({queue.media.length})</h2>{queue.media.map((asset) => <article className="moderation-card" key={asset.id}><div className="moderation-preview">{asset.reviewUrl ? (asset.media_type === "video" ? <video src={asset.reviewUrl} controls preload="metadata"/> : <img src={asset.reviewUrl} alt="Submitted creator media"/>) : <p>Private preview unavailable</p>}</div><div className="moderation-copy"><b>{asset.media_title || "Untitled creator media"}</b><p>Creator: {asset.display_name} · {asset.mime_type} · {Math.ceil(asset.size_bytes / 1024 / 1024)} MB</p><small>Uploaded {new Date(asset.created_at).toLocaleString()}</small><div className="moderation-actions"><button disabled={busy === asset.id || !asset.reviewUrl} onClick={() => void decide({ kind: "asset", id: asset.id, decision: "approve" })}>Approve</button><button disabled={busy === asset.id} onClick={() => void decide({ kind: "asset", id: asset.id, decision: "reject", notes: "Rejected during manual content review." })}>Reject</button></div></div></article>)}{queue.media.length === 0 && <p className="moderation-empty">No media awaits review.</p>}</section>
     <section><h2>Comments awaiting review ({queue.comments.length})</h2>{queue.comments.map((item) => <article className="moderation-card moderation-text-card" key={item.id}><div><p>{item.body}</p><small>{item.display_name} on {item.target_name} · {new Date(item.created_at).toLocaleString()}</small><div className="moderation-actions"><button disabled={busy === item.id} onClick={() => void decide({ kind: "comment", id: item.id, decision: "approve" })}>Approve</button><button disabled={busy === item.id} onClick={() => void decide({ kind: "comment", id: item.id, decision: "reject", notes: "Rejected during manual comment review." })}>Remove</button></div></div></article>)}{queue.comments.length === 0 && <p className="moderation-empty">No comments await review.</p>}</section>

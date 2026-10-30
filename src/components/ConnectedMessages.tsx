@@ -26,12 +26,12 @@ export default function ConnectedMessages({ role }: { role: "client" | "model" }
     return list;
   }, []);
 
-  const loadMessages = useCallback(async (conversationId: string) => {
-    if (!conversationId) { setMessages([]); return; }
+  const loadMessages = useCallback(async (conversationId: string): Promise<Message[]> => {
+    if (!conversationId) return [];
     const response = await fetch(`/api/conversations/${conversationId}/messages`, { cache: "no-store" });
     const data = await response.json() as { messages?: Message[]; error?: string };
     if (!response.ok) throw new Error(data.error ?? "Messages could not be loaded.");
-    setMessages(data.messages ?? []);
+    return data.messages ?? [];
   }, []);
 
   useEffect(() => {
@@ -62,10 +62,16 @@ export default function ConnectedMessages({ role }: { role: "client" | "model" }
   }, [loadConversations, role]);
 
   useEffect(() => {
-    if (!activeId) { setMessages([]); return; }
+    if (!activeId) return;
     let active = true;
     const refresh = async () => {
-      try { await loadMessages(activeId); if (active) setError(""); }
+      try {
+        const updated = await loadMessages(activeId);
+        if (active) {
+          setMessages(updated);
+          setError("");
+        }
+      }
       catch (reason) { if (active) setError(reason instanceof Error ? reason.message : "Messages could not be loaded."); }
     };
     void refresh();
@@ -85,7 +91,8 @@ export default function ConnectedMessages({ role }: { role: "client" | "model" }
       const data = await response.json() as { error?: string };
       if (!response.ok) throw new Error(data.error ?? "The message could not be sent.");
       setDraft("");
-      await Promise.all([loadMessages(activeId), loadConversations()]);
+      const [updatedMessages] = await Promise.all([loadMessages(activeId), loadConversations()]);
+      setMessages(updatedMessages);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "The message could not be sent."); }
     finally { setBusy(false); }
   };

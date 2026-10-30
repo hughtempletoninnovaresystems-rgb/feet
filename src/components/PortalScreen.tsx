@@ -22,11 +22,12 @@ export default function PortalScreen({ role, section }: { role: Role; section: S
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
   const [creators, setCreators] = useState<Creator[]>([]);
-  const [creatorLoading, setCreatorLoading] = useState(false);
+  const [creatorsLoaded, setCreatorsLoaded] = useState(false);
   const [notice, setNotice] = useState("");
   const [showWalletMenu, setShowWalletMenu] = useState(false);
   const [accountName, setAccountName] = useState("");
   const isModel = role === "model";
+  const creatorLoading = !isModel && section === "home" && !creatorsLoaded;
 
   useEffect(() => {
     let active = true;
@@ -41,12 +42,11 @@ export default function PortalScreen({ role, section }: { role: Role; section: S
   useEffect(() => {
     if (isModel || section !== "home") return;
     let active = true;
-    setCreatorLoading(true);
     fetch("/api/creators", { cache: "no-store" }).then(async (response) => {
       if (!response.ok) throw new Error("Creator discovery is unavailable.");
       const result = await response.json() as { creators?: Creator[] };
       if (active) setCreators(result.creators ?? []);
-    }).catch(() => { if (active) setCreators([]); }).finally(() => { if (active) setCreatorLoading(false); });
+    }).catch(() => { if (active) setCreators([]); }).finally(() => { if (active) setCreatorsLoaded(true); });
     return () => { active = false; };
   }, [isModel, section]);
 

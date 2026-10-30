@@ -21,9 +21,10 @@ export default function ConnectedSettings({ role }: { role: "client" | "model" }
     const response = await fetch("/api/account/profile", { cache: "no-store" });
     const data = await response.json() as { profile?: ProfileSettings; error?: string };
     if (!response.ok || !data.profile) throw new Error(data.error ?? "Profile settings are unavailable.");
-    setProfile(data.profile);
+    return data.profile;
   }, []);
-  useEffect(() => { void load().catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Profile settings are unavailable.")); }, [load]);
+  const handleLoadError = useCallback((reason: unknown) => setError(reason instanceof Error ? reason.message : "Profile settings are unavailable."), []);
+  useEffect(() => { void load().then(setProfile).catch(handleLoadError); }, [handleLoadError, load]);
   useEffect(() => {
     if (section !== "Privacy & safety") return;
     fetch("/api/blocks", { cache: "no-store" }).then(async (response) => {

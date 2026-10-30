@@ -6,11 +6,22 @@ import { ArrowLeft, ArrowRight, Eye, EyeOff, Sparkles } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 
 type Mode = "login" | "register" | "forgot" | "reset";
+const oauthMessages: Record<string, string> = {
+  "verify-email": "Check your email for a verification link before signing in.",
+  "not-linked": "That provider is not linked to an account. Create an account first or use your original sign-in method.",
+  "existing-account": "An account may already exist for this email. Sign in with its original method or contact support.",
+  "email-required": "This provider did not share an email address. Use email registration or another sign-in provider.",
+  "registration-closed": "Registration will open after the required legal, adult eligibility, and service setup is complete.",
+  "age-check": "Your account is waiting for adult eligibility verification before access can be enabled.",
+  cancelled: "Sign-in was cancelled. You can try again or use email.",
+  failed: "Could not verify that sign-in. Please try again.",
+  unavailable: "Social sign-in is temporarily unavailable. Please try again later.",
+};
 
-export default function AuthScreen({ mode, initialRole = "client", initialToken = "" }: { mode: Mode; initialRole?: "client" | "model"; initialToken?: string }) {
+export default function AuthScreen({ mode, initialRole = "client", initialToken = "", initialOAuthMessage }: { mode: Mode; initialRole?: "client" | "model"; initialToken?: string; initialOAuthMessage?: string }) {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState(() => initialOAuthMessage ? oauthMessages[initialOAuthMessage] ?? "Could not complete social sign-in. Please try again." : "");
   const [busy, setBusy] = useState(false);
   const [role, setRole] = useState<"client" | "model">(initialRole);
   const [ageConfirmed, setAgeConfirmed] = useState(false);
@@ -20,25 +31,12 @@ export default function AuthScreen({ mode, initialRole = "client", initialToken 
     if (initialToken) window.history.replaceState(null, "", window.location.pathname);
   }, [initialToken]);
   useEffect(() => {
+    if (!initialOAuthMessage) return;
     const params = new URLSearchParams(window.location.search);
-    const oauthMessage = params.get("oauth");
-    if (!oauthMessage) return;
-    const messages: Record<string, string> = {
-      "verify-email": "Check your email for a verification link before signing in.",
-      "not-linked": "That provider is not linked to an account. Create an account first or use your original sign-in method.",
-      "existing-account": "An account may already exist for this email. Sign in with its original method or contact support.",
-      "email-required": "This provider did not share an email address. Use email registration or another sign-in provider.",
-      "registration-closed": "Registration will open after the required legal, adult eligibility, and service setup is complete.",
-      "age-check": "Your account is waiting for adult eligibility verification before access can be enabled.",
-      cancelled: "Sign-in was cancelled. You can try again or use email.",
-      failed: "Could not verify that sign-in. Please try again.",
-      unavailable: "Social sign-in is temporarily unavailable. Please try again later.",
-    };
-    setNotice(messages[oauthMessage] ?? "Could not complete social sign-in. Please try again.");
     params.delete("oauth");
     const remaining = params.toString();
     window.history.replaceState(null, "", `${window.location.pathname}${remaining ? `?${remaining}` : ""}${window.location.hash}`);
-  }, []);
+  }, [initialOAuthMessage]);
   const isRegister = mode === "register";
   const isReset = mode === "reset";
   const title = mode === "login" ? "Welcome back." : mode === "forgot" ? "Let's get you back in." : isReset ? "Choose a new password." : "Your show starts here.";
