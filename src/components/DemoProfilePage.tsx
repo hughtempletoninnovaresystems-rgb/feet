@@ -2,11 +2,12 @@ import Link from "next/link";
 import { ArrowLeft, ArrowRight, Heart, MessageCircle } from "lucide-react";
 import { demoImageUrl, type DemoProfile } from "@/lib/demo-profiles";
 
-export default function DemoProfilePage({ profile }: { profile: DemoProfile }) {
-  return <main className="profile-page">
-    <header className="profile-header"><Link href="/#discover" className="profile-back"><ArrowLeft size={16}/> Back to home</Link><Link href="/" className="brand"><span className="brand-mark">m</span><span>my feet <b>show</b></span></Link><Link href="/legal/safety" className="profile-login">Safety</Link></header>
+export default function DemoProfilePage({ profile, embedded = false }: { profile: DemoProfile; embedded?: boolean }) {
+  const Shell = embedded ? "div" : "main";
+  return <Shell className={embedded ? "profile-page profile-embedded" : "profile-page"}>
+    {!embedded && <header className="profile-header"><Link href="/#discover" className="profile-back"><ArrowLeft size={16}/> Back to home</Link><Link href="/" className="brand"><span className="brand-mark">m</span><span>my feet <b>show</b></span></Link><Link href="/legal/safety" className="profile-login">Safety</Link></header>}
     <div className="profile-wrap">
-      <div className="site-preview-banner" role="note">Demo profile. This is a fictional example, not a real creator. Nothing can be bought, sent or posted.</div>
+      {!embedded && <div className="site-preview-banner" role="note">Demo profile. This is a fictional example, not a real creator. Nothing can be bought, sent or posted.</div>}
       <div className="profile-cover" style={{ background: `linear-gradient(rgba(30,24,22,.12), rgba(30,24,22,.28)), ${profile.colour} url(${demoImageUrl(profile.image, 1400)}) center/cover` }}><span className="profile-cover-tag">DEMO PROFILE</span></div>
       <div className="profile-main">
         <div className="profile-identity"><div className="profile-avatar" style={{ background: `${profile.colour} url(${demoImageUrl(profile.image, 300)}) center/cover` }} role="img" aria-label={`${profile.name}, sample creator photo`} /><div className="profile-identity-copy"><span className="eyebrow">SAMPLE CREATOR</span><h1>{profile.name}</h1><p>{profile.handle}<span> · </span>{profile.location}</p></div></div>
@@ -20,6 +21,6 @@ export default function DemoProfilePage({ profile }: { profile: DemoProfile }) {
         </section><aside className="profile-aside"><div className="profile-connect-card"><span className="connect-icon"><MessageCircle size={18}/></span><h3>Say hello to {profile.name}</h3><p>Messaging opens at launch, after age verification. This is a demo.</p><button className="button button-dark button-full" disabled>Send a message <ArrowRight size={15}/></button></div><div className="profile-community-note"><b>About this demo</b><p>Profiles, comments and prices are made up to show how the service will look. Real creators appear only after age verification and moderation.</p></div></aside></div>
       </div>
     </div>
-    <footer className="profile-footer"><span>© 2026 My Feet Show</span><span><Link href="/legal/terms">Terms</Link><Link href="/legal/privacy">Privacy</Link><Link href="/legal/safety">Safety</Link><Link href="/legal/refunds">Refunds</Link></span></footer>
-  </main>;
+    {!embedded && <footer className="profile-footer"><span>© 2026 My Feet Show</span><span><Link href="/legal/terms">Terms</Link><Link href="/legal/privacy">Privacy</Link><Link href="/legal/safety">Safety</Link><Link href="/legal/refunds">Refunds</Link></span></footer>}
+  </Shell>;
 }
