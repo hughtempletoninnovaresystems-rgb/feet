@@ -1,12 +1,14 @@
 "use client";
 
-import { demoProfiles } from "@/lib/demo-profiles";
+import { demoImageUrl, demoProfiles } from "@/lib/demo-profiles";
 import Link from "next/link";
 import { ArrowDown, ArrowRight, ArrowUpRight, Check, Heart, Menu, ShieldCheck, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 
 export default function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [liked, setLiked] = useState<string[]>([]);
+  const toggleLike = (slug: string) => setLiked((current) => current.includes(slug) ? current.filter((item) => item !== slug) : [...current, slug]);
 
   return <main className="landing">
     <header className="site-nav">
@@ -44,7 +46,11 @@ export default function LandingPage() {
     <section className="discover-section" id="discover">
       <div className="wrap">
         <div className="section-heading"><div><div className="eyebrow">THE PEOPLE BEHIND THE DETAILS</div><h2>Creator discovery opens <em>at launch.</em></h2></div></div>
-        <div className="creator-grid" id="creators">{demoProfiles.map((profile) => <Link href={`/demo/${profile.slug}`} className="creator-card" key={profile.slug}><div className="creator-photo" style={{ background: profile.colour }}><span className="profile-avatar profile-avatar-placeholder" style={{ position: "absolute", inset: "auto auto 18px 18px" }}>{profile.name.slice(0, 1)}</span></div><div className="creator-info"><div><h3>{profile.name} <span>· Demo</span></h3><p>{profile.category}<span> · </span>{profile.location}</p></div></div></Link>)}</div>
+        <div className="creator-grid" id="creators">{demoProfiles.map((profile) => <article className={`creator-card ${profile.tint}`} key={profile.slug}>
+          <div className="creator-photo"><img src={demoImageUrl(profile.image, 720)} alt={`${profile.name}, sample creator profile`} /><span className="creator-available">SAMPLE</span><button className={liked.includes(profile.slug) ? "heart-button liked" : "heart-button"} aria-label={`Preview like for ${profile.name}`} onClick={() => toggleLike(profile.slug)}><Heart size={17} fill={liked.includes(profile.slug) ? "currentColor" : "none"} /></button></div>
+          <div className="creator-info"><div><h3>{profile.name}</h3><p>{profile.location} <span>·</span> {profile.tagline}</p></div><div className="creator-rate"><b>{profile.rate}</b><small>tokens/min</small></div></div>
+          <Link href={`/demo/${profile.slug}`} className="creator-link">View profile <ArrowUpRight size={15} /></Link>
+        </article>)}</div>
         <div className="browse-strip"><span>These are fictional demo profiles to show how the service will look. Real creators appear after age verification and safety checks.</span><Link href="/legal/safety" className="button button-outline">Read the safety approach <ArrowRight size={16} /></Link></div>
       </div>
     </section>

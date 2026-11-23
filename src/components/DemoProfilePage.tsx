@@ -1,16 +1,16 @@
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, Heart, MessageCircle } from "lucide-react";
-import type { DemoProfile } from "@/lib/demo-profiles";
+import { demoImageUrl, type DemoProfile } from "@/lib/demo-profiles";
 
 export default function DemoProfilePage({ profile }: { profile: DemoProfile }) {
   return <main className="profile-page">
     <header className="profile-header"><Link href="/#discover" className="profile-back"><ArrowLeft size={16}/> Back to home</Link><Link href="/" className="brand"><span className="brand-mark">m</span><span>my feet <b>show</b></span></Link><Link href="/legal/safety" className="profile-login">Safety</Link></header>
     <div className="profile-wrap">
       <div className="site-preview-banner" role="note">Demo profile. This is a fictional example, not a real creator. Nothing can be bought, sent or posted.</div>
-      <div className="profile-cover" style={{ background: profile.colour }}><span className="profile-cover-tag">DEMO PROFILE</span></div>
+      <div className="profile-cover" style={{ background: `linear-gradient(rgba(30,24,22,.12), rgba(30,24,22,.28)), ${profile.colour} url(${demoImageUrl(profile.image, 1400)}) center/cover` }}><span className="profile-cover-tag">DEMO PROFILE</span></div>
       <div className="profile-main">
-        <div className="profile-identity"><div className="profile-avatar profile-avatar-placeholder">{profile.name.slice(0, 1)}</div><div className="profile-identity-copy"><span className="eyebrow">SAMPLE CREATOR</span><h1>{profile.name}</h1><p>{profile.handle}<span> · </span>{profile.location}</p></div></div>
-        <div className="profile-stats"><span><Heart size={15} fill="currentColor"/> {profile.likes.toLocaleString()} likes</span><span><MessageCircle size={15}/> {profile.comments.length} comments</span><span className="tag-pill">{profile.category}</span></div>
+        <div className="profile-identity"><div className="profile-avatar" style={{ background: `${profile.colour} url(${demoImageUrl(profile.image, 300)}) center/cover` }} role="img" aria-label={`${profile.name}, sample creator photo`} /><div className="profile-identity-copy"><span className="eyebrow">SAMPLE CREATOR</span><h1>{profile.name}</h1><p>{profile.handle}<span> · </span>{profile.location}</p></div></div>
+        <div className="profile-stats"><span><Heart size={15} fill="currentColor"/> {profile.likes.toLocaleString()} likes</span><span><MessageCircle size={15}/> {profile.comments.length} comments</span><span className="tag-pill">{profile.category}</span><span className="tag-pill">{profile.rate} tokens/min</span></div>
         <div className="profile-columns"><section className="profile-about"><div className="list-heading"><div><span className="eyebrow">A LITTLE ABOUT ME</span><h2>Hello, I&apos;m {profile.name}.</h2></div></div><p className="profile-bio">{profile.bio}</p>
           <div className="profile-content-title"><span className="eyebrow">THE LATEST DETAILS</span><span>Demo only. Purchases are disabled.</span></div>
           <div className="profile-content-grid">{profile.content.map((item) => <article className="profile-content-card" key={item.title}><div className="profile-content-placeholder">{item.kind}</div><span><span className="content-lock">✦</span> {item.title} · {item.tokens} tokens · unavailable</span></article>)}</div>
